@@ -32,7 +32,7 @@ jobs:
       - name: Gerar pastas android/ios
         run: flutter create --platforms=android,ios --org com.example --project-name docscan .
       - run: flutter pub get
-      - run: dart run flutter_native_splash:create
+      #- run: dart run flutter_native_splash:create
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
