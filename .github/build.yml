@@ -1,0 +1,79 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Organizar arquivos
+        run: |
+          mkdir -p lib/screens lib/services assets
+          [ -f main.dart ] && mv main.dart lib/main.dart || true
+          [ -f home_screen.dart ] && mv home_screen.dart lib/screens/ || true
+          [ -f splash_screen.dart ] && mv splash_screen.dart lib/screens/ || true
+          [ -f viewer_screen.dart ] && mv viewer_screen.dart lib/screens/ || true
+          [ -f doc_store.dart ] && mv doc_store.dart lib/services/ || true
+          [ -f logo_docscan.png ] && mv logo_docscan.png assets/logo.png || true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Gerar pastas android/ios
+        run: flutter create --platforms=android,ios --org com.example --project-name docscan .
+
+      - name: Forcar compileSdk 36 nos plugins
+        run: |
+          if [ -f android/build.gradle.kts ]; then
+          cat >> android/build.gradle.kts <<'KTS'
+
+          subprojects {
+              val fixSdk: Project.() -> Unit = {
+                  val ext = extensions.findByName("android")
+                  if (ext != null) {
+                      try {
+                          ext.javaClass.getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType).invoke(ext, 36)
+                      } catch (e: Exception) {
+                          println("compileSdk nao alterado em " + name)
+                      }
+                  }
+              }
+              if (state.executed) fixSdk() else afterEvaluate { fixSdk() }
+          }
+          KTS
+          else
+          cat >> android/build.gradle <<'GRV'
+
+          subprojects {
+              def fixSdk = { p ->
+                  if (p.hasProperty('android')) {
+                      p.android.compileSdkVersion 36
+                  }
+              }
+              if (state.executed) { fixSdk(project) } else { afterEvaluate { fixSdk(it) } }
+          }
+          GRV
+          fi
+
+      - run: flutter pub get
+
+      # - run: dart run flutter_native_splash:create
+
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docscan-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
