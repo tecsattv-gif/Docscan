@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'tool_actions.dart';
 
 class ViewerScreen extends StatefulWidget {
   final File file;
@@ -73,6 +74,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
           IconButton(
               icon: const Icon(Icons.share),
               onPressed: () => Share.shareXFiles([XFile(widget.file.path)])),
+          IconButton(
+              tooltip: 'Ferramentas',
+              icon: const Icon(Icons.build_outlined),
+              onPressed: () => ToolActions.showPdfTools(context, widget.file)),
         ],
       ),
       body: FutureBuilder<int>(
