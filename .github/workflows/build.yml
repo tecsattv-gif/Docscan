@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Organizar arquivos
+        run: |
+          mkdir -p lib/screens lib/services assets
+          if [ -f main.dart ]; then mv main.dart lib/main.dart; fi
+          for f in home_screen splash_screen viewer_screen; do
+            if [ -f $f.dart ]; then mv $f.dart lib/screens/$f.dart; fi
+          done
+          if [ -f doc_store.dart ]; then mv doc_store.dart lib/services/doc_store.dart; fi
+          if [ -f logo_docscan.png ]; then mv logo_docscan.png assets/logo.png; fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Gerar pastas android/ios
+        run: flutter create --platforms=android,ios --org com.example --project-name docscan .
+      - run: flutter pub get
+      - run: dart run flutter_native_splash:create
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docscan-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
