@@ -35,6 +35,7 @@ class _EditorScreenState extends State<EditorScreen> {
   static const _filters = <String, String>{
     'original': 'Original',
     'magic': 'Mágico',
+    'flatten': 'Desamassar',
     'bw': 'P&B',
     'gray': 'Cinza',
     'enhance': 'Realçar',

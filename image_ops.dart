@@ -129,7 +129,7 @@ class ImageOps {
         _cl(mix(g00, g10, g01, g11)), _cl(mix(b00, b10, b01, b11)));
   }
 
-  /// Filtros: original, magic, bw, gray, enhance
+  /// Filtros: original, magic, flatten, bw, gray, enhance
   static Uint8List filter(Map a) {
     final bytes = a['bytes'] as Uint8List;
     final mode = a['mode'] as String;
@@ -149,6 +149,11 @@ class ImageOps {
         p.g = _cl((p.g - 128) * 1.25 + 140);
         p.b = _cl((p.b - 128) * 1.25 + 140);
       }
+    } else if (mode == 'flatten') {
+      final clean = img.gaussianBlur(im, radius: 1);
+      _flatten(clean);
+      _despeckle(clean);
+      return Uint8List.fromList(img.encodeJpg(clean, quality: 90));
     } else {
       // tira o granulado do sensor antes de clarear o papel
       final clean = img.gaussianBlur(im, radius: 1);
@@ -290,6 +295,96 @@ class ImageOps {
         p.g = _cl(gg * 255);
         p.b = _cl(b * 255);
       }
+    }
+  }
+
+  /// "Desamassar": remove vincos, dobras e sombras de papel amassado.
+  /// Estima o fundo do papel numa escala fina (segue a sombra de cada dobra,
+  /// mas ignora o texto) e divide a imagem por ele. As linhas fracas que
+  /// sobram das dobras viram branco; o texto continua escuro.
+  static void _flatten(img.Image im) {
+    final w = im.width, h = im.height;
+    final k = math.min(1.0, 600 / math.max(w, h));
+    final sm = img.copyResize(im,
+        width: math.max(8, (w * k).round()),
+        height: math.max(8, (h * k).round()),
+        interpolation: img.Interpolation.average);
+    final sw = sm.width, sh = sm.height, n = sw * sh;
+    final ch = [Float32List(n), Float32List(n), Float32List(n)];
+    for (final p in sm) {
+      final i = p.y * sw + p.x;
+      ch[0][i] = p.r.toDouble();
+      ch[1][i] = p.g.toDouble();
+      ch[2][i] = p.b.toDouble();
+    }
+
+    // filtro de máximo/mínimo/média separável (linhas e depois colunas)
+    Float32List pass(Float32List a, int r, int op, bool horiz) {
+      final o = Float32List(n);
+      for (var y = 0; y < sh; y++) {
+        for (var x = 0; x < sw; x++) {
+          var m = op == 0 ? -1.0 : (op == 1 ? 1e9 : 0.0);
+          var c = 0;
+          for (var d = -r; d <= r; d++) {
+            final xx = horiz ? x + d : x, yy = horiz ? y : y + d;
+            if (xx < 0 || yy < 0 || xx >= sw || yy >= sh) continue;
+            final v = a[yy * sw + xx];
+            if (op == 0) {
+              if (v > m) m = v;
+            } else if (op == 1) {
+              if (v < m) m = v;
+            } else {
+              m += v;
+              c++;
+            }
+          }
+          o[y * sw + x] = op == 2 ? m / c : m;
+        }
+      }
+      return o;
+    }
+
+    Float32List f2(Float32List a, int r, int op) =>
+        pass(pass(a, r, op, true), r, op, false);
+
+    // máximo apaga o texto; mínimo devolve as bordas das sombras ao lugar;
+    // média suaviza o fundo.
+    final r = (math.max(sw, sh) / 90).round().clamp(3, 9);
+    final bg = [
+      for (final a in ch) f2(f2(f2(f2(a, r, 0), r, 1), 3, 2), 3, 2)
+    ];
+
+    double samp(Float32List a, double gx, double gy) {
+      final x0 = gx.floor(), y0 = gy.floor();
+      final tx = gx - x0, ty = gy - y0;
+      int cx(int v) => v < 0 ? 0 : (v >= sw ? sw - 1 : v);
+      int cy(int v) => v < 0 ? 0 : (v >= sh ? sh - 1 : v);
+      final a00 = a[cy(y0) * sw + cx(x0)];
+      final a10 = a[cy(y0) * sw + cx(x0 + 1)];
+      final a01 = a[cy(y0 + 1) * sw + cx(x0)];
+      final a11 = a[cy(y0 + 1) * sw + cx(x0 + 1)];
+      return (a00 * (1 - tx) + a10 * tx) * (1 - ty) +
+          (a01 * (1 - tx) + a11 * tx) * ty;
+    }
+
+    // curva suave: dobras fracas somem no branco, texto fica escuro
+    const lo = 0.25, hi = 0.72;
+    for (final p in im) {
+      final gx = p.x * k - 0.5, gy = p.y * k - 0.5;
+      final v = <double>[
+        p.r / math.max(samp(bg[0], gx, gy), 1.0),
+        p.g / math.max(samp(bg[1], gx, gy), 1.0),
+        p.b / math.max(samp(bg[2], gx, gy), 1.0),
+      ];
+      for (var i = 0; i < 3; i++) {
+        final t = ((v[i] - lo) / (hi - lo)).clamp(0.0, 1.0).toDouble();
+        v[i] = t * t * (3 - 2 * t);
+      }
+      // mantém as cores (carimbos, caneta azul) um pouco reforçadas
+      final l = 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2];
+      p.r = _cl((l + (v[0] - l) * 1.3) * 255);
+      p.g = _cl((l + (v[1] - l) * 1.3) * 255);
+      p.b = _cl((l + (v[2] - l) * 1.3) * 255);
     }
   }
 
