@@ -16,7 +16,8 @@ class ViewerScreen extends StatefulWidget {
 
 class _ViewerScreenState extends State<ViewerScreen> {
   final _controller = PdfViewerController();
-  late final PdfTextSearcher _searcher;
+  // Criado só quando o leitor já abriu o documento (antes disso o pdfrx dá erro).
+  PdfTextSearcher? _searcher;
   late final Future<int> _lastPage;
 
   String get _key => 'page:${widget.file.path}';
@@ -24,7 +25,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   void initState() {
     super.initState();
-    _searcher = PdfTextSearcher(_controller)..addListener(_update);
     _lastPage = SharedPreferences.getInstance()
         .then((p) => p.getInt(_key) ?? 1);
   }
@@ -35,8 +35,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   void dispose() {
-    _searcher.removeListener(_update);
-    _searcher.dispose();
+    _searcher?.removeListener(_update);
+    _searcher?.dispose();
     super.dispose();
   }
 
@@ -60,13 +60,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ),
     );
     if (q == null || q.trim().isEmpty) return;
-    _searcher.startTextSearch(q.trim(), searchImmediately: true);
+    _searcher?.startTextSearch(q.trim(), searchImmediately: true);
   }
 
   @override
   Widget build(BuildContext context) {
     final name = widget.file.path.split(Platform.pathSeparator).last;
-    final hasResult = _searcher.hasMatches;
+    final hasResult = _searcher?.hasMatches ?? false;
     return Scaffold(
       appBar: AppBar(
         title: Text(name, overflow: TextOverflow.ellipsis),
@@ -74,10 +74,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
           if (hasResult) ...[
             IconButton(
                 icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: () => _searcher.goToPrevMatch()),
+                onPressed: () => _searcher?.goToPrevMatch()),
             IconButton(
                 icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: () => _searcher.goToNextMatch()),
+                onPressed: () => _searcher?.goToNextMatch()),
           ],
           IconButton(icon: const Icon(Icons.search), onPressed: _search),
           IconButton(
@@ -101,7 +101,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
             initialPageNumber: snap.data!,
             params: PdfViewerParams(
               backgroundColor: const Color(0xFF3A3A3E),
-              pagePaintCallbacks: [_searcher.pageTextMatchPaintCallback],
+              onViewerReady: (document, controller) {
+                if (_searcher != null) return;
+                _searcher = PdfTextSearcher(_controller)..addListener(_update);
+                _update();
+              },
+              pagePaintCallbacks: [
+                (canvas, pageRect, page) => _searcher
+                    ?.pageTextMatchPaintCallback(canvas, pageRect, page),
+              ],
               onPageChanged: (n) async {
                 if (n == null) return;
                 final p = await SharedPreferences.getInstance();
