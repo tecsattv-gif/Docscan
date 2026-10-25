@@ -85,6 +85,10 @@ class DocStore {
     null,
   ];
 
+  /// Formato de papel pelo índice (o item "Tamanho da foto" vira A4).
+  static PdfPageFormat pageFormatAt(int i) =>
+      _pageSizes[i.clamp(0, _pageSizes.length - 1)] ?? PdfPageFormat.a4;
+
   static Future<int> lastPageSize() async {
     final p = await SharedPreferences.getInstance();
     final i = p.getInt('page_size') ?? 0;

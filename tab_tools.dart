@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'common.dart';
+import 'create_pdf_screen.dart';
 import 'tool_actions.dart';
 
 class ToolsTab extends StatelessWidget {
@@ -15,6 +16,10 @@ class ToolsTab extends StatelessWidget {
         _T(Icons.badge_outlined, 'Cartão ID', () => ToolActions.idCard(c)),
         _T(Icons.text_fields, 'Texto (OCR)', () => ToolActions.ocrImage(c)),
         _T(Icons.qr_code_scanner, 'Leitor QR', () => ToolActions.qr(c)),
+      ],
+      'Criar': [
+        _T(Icons.note_add_outlined, 'Criar PDF', () => Navigator.push(c,
+            MaterialPageRoute(builder: (_) => const CreatePdfScreen()))),
       ],
       'Importar': [
         _T(Icons.picture_as_pdf_outlined, 'Importar PDF', () => ToolActions.importPdf(c)),

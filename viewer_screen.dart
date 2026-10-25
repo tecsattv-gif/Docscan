@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'tool_actions.dart';
 
+/// Leitor de PDF (pdfrx/PDFium): respeita retrato e paisagem de cada página,
+/// ajusta à largura da tela e permite zoom com pinça.
 class ViewerScreen extends StatefulWidget {
   final File file;
   const ViewerScreen({super.key, required this.file});
@@ -14,7 +16,7 @@ class ViewerScreen extends StatefulWidget {
 
 class _ViewerScreenState extends State<ViewerScreen> {
   final _controller = PdfViewerController();
-  PdfTextSearchResult? _result;
+  late final PdfTextSearcher _searcher;
   late final Future<int> _lastPage;
 
   String get _key => 'page:${widget.file.path}';
@@ -22,8 +24,20 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   void initState() {
     super.initState();
+    _searcher = PdfTextSearcher(_controller)..addListener(_update);
     _lastPage = SharedPreferences.getInstance()
         .then((p) => p.getInt(_key) ?? 1);
+  }
+
+  void _update() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _searcher.removeListener(_update);
+    _searcher.dispose();
+    super.dispose();
   }
 
   Future<void> _search() async {
@@ -46,18 +60,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ),
     );
     if (q == null || q.trim().isEmpty) return;
-    _result?.clear();
-    final r = _controller.searchText(q.trim());
-    r.addListener(() {
-      if (mounted) setState(() {});
-    });
-    setState(() => _result = r);
+    _searcher.startTextSearch(q.trim(), searchImmediately: true);
   }
 
   @override
   Widget build(BuildContext context) {
     final name = widget.file.path.split(Platform.pathSeparator).last;
-    final hasResult = _result != null && _result!.hasResult;
+    final hasResult = _searcher.hasMatches;
     return Scaffold(
       appBar: AppBar(
         title: Text(name, overflow: TextOverflow.ellipsis),
@@ -65,10 +74,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
           if (hasResult) ...[
             IconButton(
                 icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: _result!.previousInstance),
+                onPressed: () => _searcher.goToPrevMatch()),
             IconButton(
                 icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: _result!.nextInstance),
+                onPressed: () => _searcher.goToNextMatch()),
           ],
           IconButton(icon: const Icon(Icons.search), onPressed: _search),
           IconButton(
@@ -86,14 +95,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          return SfPdfViewer.file(
-            widget.file,
+          return PdfViewer.file(
+            widget.file.path,
             controller: _controller,
             initialPageNumber: snap.data!,
-            onPageChanged: (d) async {
-              final p = await SharedPreferences.getInstance();
-              await p.setInt(_key, d.newPageNumber);
-            },
+            params: PdfViewerParams(
+              backgroundColor: const Color(0xFF3A3A3E),
+              pagePaintCallbacks: [_searcher.pageTextMatchPaintCallback],
+              onPageChanged: (n) async {
+                if (n == null) return;
+                final p = await SharedPreferences.getInstance();
+                await p.setInt(_key, n);
+              },
+            ),
           );
         },
       ),
