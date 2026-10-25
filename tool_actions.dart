@@ -25,6 +25,7 @@ import 'editor_screen.dart';
 import 'id_reader.dart';
 import 'page_manager.dart';
 import 'place_screen.dart';
+import 'recreate_screen.dart';
 import 'signature_screen.dart';
 import 'text_screen.dart';
 import 'viewer_screen.dart';
@@ -476,6 +477,16 @@ class ToolActions {
     } finally {
       await rec.close();
     }
+  }
+
+  /// Recriar página: foto danificada -> texto conferido -> PDF novo e limpo.
+  static Future<void> recreatePage(BuildContext c) async {
+    final path = await _imagePath(c);
+    if (path == null || !c.mounted) return;
+    final bytes = await _editPath(c, path);
+    if (bytes == null || !c.mounted) return;
+    Navigator.push(c,
+        MaterialPageRoute(builder: (_) => RecreateScreen(image: bytes)));
   }
 
   static Future<void> ocrImage(BuildContext c) async {

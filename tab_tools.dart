@@ -15,6 +15,7 @@ class ToolsTab extends StatelessWidget {
         _T(Icons.menu_book_outlined, 'Modo livro', () => ToolActions.scanBook(c)),
         _T(Icons.badge_outlined, 'Cartão ID', () => ToolActions.idCard(c)),
         _T(Icons.text_fields, 'Texto (OCR)', () => ToolActions.ocrImage(c)),
+        _T(Icons.auto_fix_high, 'Recriar página', () => ToolActions.recreatePage(c)),
         _T(Icons.qr_code_scanner, 'Leitor QR', () => ToolActions.qr(c)),
       ],
       'Criar': [
