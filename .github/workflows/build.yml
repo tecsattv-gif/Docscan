@@ -81,6 +81,7 @@ jobs:
           done
 
       - run: flutter pub get
+      - run: sed -i 's/signingConfig = signingConfigs.getByName("debug")/&\n            isMinifyEnabled = false\n            isShrinkResources = false/' android/app/build.gradle.kts
 
       - run: flutter build apk --release --no-shrink
 
