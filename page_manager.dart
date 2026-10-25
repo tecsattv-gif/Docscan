@@ -8,7 +8,7 @@ import '../services/pdf_tools.dart';
 import 'common.dart';
 import 'viewer_screen.dart';
 
-/// Organizar páginas: reordenar (segure e arraste), excluir e extrair.
+/// Organizar páginas: reordenar (segure e arraste), girar, excluir e extrair.
 class PageManagerScreen extends StatefulWidget {
   final File file;
   const PageManagerScreen({super.key, required this.file});
@@ -21,6 +21,8 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
   final List<Uint8List> _thumbs = [];
   List<int> _order = [];
   final Set<int> _sel = {};
+  // Giro de cada página original, em graus (0, 90, 180, 270).
+  final Map<int, int> _rot = {};
   bool _loading = true;
 
   @override
@@ -52,7 +54,11 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
         initial: '${docName(widget.file)} $suffix');
     if (name == null || name.isEmpty || !mounted) return;
     final f = await Busy.run<File>(context, 'Gerando PDF...', () async {
-      final out = await compute(PdfTools.pick, {'pdf': _bytes!, 'pages': pages});
+      final out = await compute(PdfTools.pick, {
+        'pdf': _bytes!,
+        'pages': pages,
+        'rot': [for (final p in pages) _rot[p] ?? 0],
+      });
       return DocStore.saveBytes(out, name);
     });
     if (f == null || !mounted) return;
@@ -63,14 +69,41 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Organizar páginas')),
+      appBar: AppBar(
+        title: const Text('Organizar páginas'),
+        actions: [
+          if (_order.isNotEmpty)
+            TextButton(
+              onPressed: () => setState(() {
+                if (_sel.length == _order.length) {
+                  _sel.clear();
+                } else {
+                  _sel
+                    ..clear()
+                    ..addAll(_order);
+                }
+              }),
+              child: Text(_sel.length == _order.length ? 'Desmarcar' : 'Marcar todas'),
+            ),
+          if (_sel.isNotEmpty)
+            IconButton(
+              tooltip: 'Girar marcadas',
+              icon: const Icon(Icons.rotate_right),
+              onPressed: () => setState(() {
+                for (final o in _sel) {
+                  _rot[o] = ((_rot[o] ?? 0) + 90) % 360;
+                }
+              }),
+            ),
+        ],
+      ),
       body: _loading && _thumbs.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : Column(children: [
               Padding(
                 padding: const EdgeInsets.all(10),
                 child: Text(
-                    'Segure uma página e arraste para mudar a ordem. Marque para extrair.',
+                    'Segure e arraste para mudar a ordem. Toque em ↻ para girar. Marque para extrair.',
                     style: TextStyle(color: context.muted, fontSize: 13)),
               ),
               Expanded(
@@ -90,11 +123,22 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
                       leading: Container(
                         color: Colors.white,
                         width: 48,
-                        child: Image.memory(_thumbs[o], fit: BoxFit.cover),
+                        child: RotatedBox(
+                          quarterTurns: (_rot[o] ?? 0) ~/ 90,
+                          child: Image.memory(_thumbs[o], fit: BoxFit.cover),
+                        ),
                       ),
                       title: Text('Página ${i + 1}'),
-                      subtitle: Text('Original: ${o + 1}'),
+                      subtitle: Text((_rot[o] ?? 0) == 0
+                          ? 'Original: ${o + 1}'
+                          : 'Original: ${o + 1} · girada ${_rot[o]}°'),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Girar',
+                          icon: const Icon(Icons.rotate_right),
+                          onPressed: () => setState(
+                              () => _rot[o] = ((_rot[o] ?? 0) + 90) % 360),
+                        ),
                         Checkbox(
                           value: _sel.contains(o),
                           onChanged: (v) => setState(() {

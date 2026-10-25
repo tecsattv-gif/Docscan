@@ -81,12 +81,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ],
           IconButton(icon: const Icon(Icons.search), onPressed: _search),
           IconButton(
+              tooltip: 'Adicionar páginas',
+              icon: const Icon(Icons.add_a_photo_outlined),
+              onPressed: () => ToolActions.addPages(context,
+                  file: widget.file, fromViewer: true)),
+          IconButton(
               icon: const Icon(Icons.share),
               onPressed: () => Share.shareXFiles([XFile(widget.file.path)])),
           IconButton(
               tooltip: 'Ferramentas',
               icon: const Icon(Icons.build_outlined),
-              onPressed: () => ToolActions.showPdfTools(context, widget.file)),
+              onPressed: () => ToolActions.showPdfTools(context, widget.file,
+                  fromViewer: true)),
         ],
       ),
       body: FutureBuilder<int>(

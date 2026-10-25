@@ -130,6 +130,13 @@ class ToolActions {
   }
 
   static Future<void> scanDocument(BuildContext c) async {
+    final pages = await _scanPages(c);
+    if (!c.mounted) return;
+    await _finishScan(c, pages);
+  }
+
+  /// Digitaliza páginas (scanner automático, ou câmera manual se falhar).
+  static Future<List<Uint8List>> _scanPages(BuildContext c) async {
     final prefs = await SharedPreferences.getInstance();
     final auto = prefs.getBool('auto_scan') ?? true;
     final pages = <Uint8List>[];
@@ -137,10 +144,10 @@ class ToolActions {
     if (auto) {
       try {
         final paths = await CunningDocumentScanner.getPictures(noOfPages: 30);
-        if (paths == null || paths.isEmpty) return;
+        if (paths == null || paths.isEmpty) return pages;
         autoOk = true;
         for (final p in paths) {
-          if (!c.mounted) return;
+          if (!c.mounted) return pages;
           final b = await _editPath(c, p, crop: false);
           if (b != null) pages.add(b);
         }
@@ -154,10 +161,62 @@ class ToolActions {
       }
     }
     if (!autoOk) {
-      if (!c.mounted) return;
+      if (!c.mounted) return pages;
       pages.addAll(await _manualLoop(c));
     }
-    await _finishScan(c, pages);
+    return pages;
+  }
+
+  /// Digitaliza ou importa mais páginas e junta no FINAL de um PDF existente.
+  /// [fromViewer]: chamado de dentro do leitor; reabre o leitor atualizado.
+  static Future<void> addPages(BuildContext c,
+      {File? file, bool fromViewer = false}) async {
+    final f = await _pdf(c, file, title: 'Adicionar páginas em qual PDF?');
+    if (f == null || !c.mounted) return;
+    final src = await choose(c, 'Adicionar páginas a "${docName(f)}"',
+        ['Digitalizar com a câmera', 'Escolher fotos da galeria']);
+    if (src == null || !c.mounted) return;
+    final pages = <Uint8List>[];
+    if (src == 0) {
+      pages.addAll(await _scanPages(c));
+    } else {
+      final xs = await _picker.pickMultiImage(imageQuality: 95);
+      for (final x in xs) {
+        if (!c.mounted) return;
+        final b = await _editPath(c, x.path);
+        if (b != null) pages.add(b);
+      }
+    }
+    if (pages.isEmpty || !c.mounted) return;
+    final size = await DocStore.lastPageSize();
+    final orient = await DocStore.lastOrientation();
+    if (!c.mounted) return;
+    final before = await Busy.run<int>(c, 'Adicionando ${pages.length} página(s)...',
+        () async {
+      final old = await f.readAsBytes();
+      final n = await compute(PdfTools.pageCount, old);
+      final extra = await DocStore.imagesToPdfBytes(pages,
+          pageSize: size, orientation: orient);
+      final merged = await compute(PdfTools.merge, [old, extra]);
+      await DocStore.overwrite(f, merged);
+      return n;
+    });
+    if (before == null || !c.mounted) return;
+    // Abre o leitor já na primeira página nova.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('page:${f.path}', before + 1);
+    if (!c.mounted) return;
+    toast(c, '${pages.length} página(s) adicionada(s)');
+    if (fromViewer) {
+      // Fecha o leitor antigo e só depois reabre, para o leitor não
+      // reaproveitar a versão antiga do arquivo que ainda está na memória.
+      final nav = Navigator.of(c);
+      nav.pop();
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      nav.push(MaterialPageRoute(builder: (_) => ViewerScreen(file: f)));
+    } else {
+      open(c, f);
+    }
   }
 
   static Future<void> scanBook(BuildContext c) async {
@@ -176,33 +235,89 @@ class ToolActions {
     await _finishScan(c, pages);
   }
 
+  /// Cartão ID: frente e verso numa única página A4 (como uma fotocópia).
   static Future<void> idCard(BuildContext c) async {
-    final s = await _source(c);
-    if (s == null || !c.mounted) return;
-    toast(c, 'Fotografe a FRENTE do documento');
-    final p1 = await _imagePath(c, source: s);
-    if (p1 == null || !c.mounted) return;
-    final front = await _editPath(c, p1);
+    var mode = await choose(c, 'Cartão ID — como capturar?', [
+      'Scanner automático (recomendado)',
+      'Câmera (recorte manual)',
+      'Fotos da galeria',
+    ]);
+    if (mode == null || !c.mounted) return;
+
+    Future<Uint8List?> side(String label) async {
+      if (!c.mounted) return null;
+      toast(c, 'Capture o $label do documento');
+      if (mode == 0) {
+        try {
+          final paths = await CunningDocumentScanner.getPictures(noOfPages: 1);
+          if (paths == null || paths.isEmpty || !c.mounted) return null;
+          return _editPath(c, paths.first, crop: false);
+        } catch (_) {
+          mode = 1;
+          if (c.mounted) {
+            toast(c, 'Scanner automático indisponível. Usando a câmera.');
+          }
+        }
+      }
+      if (!c.mounted) return null;
+      final p = await _imagePath(c,
+          source: mode == 2 ? ImageSource.gallery : ImageSource.camera);
+      if (p == null || !c.mounted) return null;
+      return _editPath(c, p);
+    }
+
+    final front = await side('FRENTE');
     if (front == null || !c.mounted) return;
-    toast(c, 'Agora o VERSO do documento');
-    final p2 = await _imagePath(c, source: s);
-    if (p2 == null || !c.mounted) return;
-    final back = await _editPath(c, p2);
-    if (back == null || !c.mounted) return;
-    final name = await askText(c, 'Nome do documento', initial: 'Documento de identidade');
+    Uint8List? back;
+    final more = await choose(c, 'Frente pronta', ['Capturar o VERSO', 'Só a frente']);
+    if (more == null || !c.mounted) return;
+    if (more == 0) {
+      back = await side('VERSO');
+      if (back == null || !c.mounted) return;
+    }
+    final size = await choose(c, 'Tamanho no PDF', [
+      'Tamanho real do cartão (para imprimir como cópia)',
+      'Grande (fácil de ler na tela)',
+    ]);
+    if (size == null || !c.mounted) return;
+    final name = await askText(c, 'Nome do documento',
+        initial: 'Documento de identidade');
     if (name == null || name.isEmpty || !c.mounted) return;
+
     final f = await Busy.run<File>(c, 'Criando PDF...', () async {
+      // Caixa onde cada lado cabe sem estourar a página A4.
+      final real = size == 0;
+      final boxW = real ? 85.6 * PdfPageFormat.mm : 360.0;
+      final boxH = real ? 54.0 * PdfPageFormat.mm : 250.0;
+      pw.Widget card(Uint8List b) {
+        final im = pw.MemoryImage(b);
+        final iw = (im.width ?? 1).toDouble();
+        final ih = (im.height ?? 1).toDouble();
+        // Cartão em pé: troca largura e altura da caixa.
+        final tall = ih > iw;
+        return pw.SizedBox(
+          width: tall ? boxH : boxW,
+          height: tall ? boxW : boxH,
+          child: pw.Image(im, fit: pw.BoxFit.contain),
+        );
+      }
+
       final doc = pw.Document();
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.all(36),
         build: (_) => pw.Column(
+          mainAxisAlignment: real
+              ? pw.MainAxisAlignment.start
+              : pw.MainAxisAlignment.spaceEvenly,
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.SizedBox(height: 20),
-            pw.Image(pw.MemoryImage(front), width: 360, fit: pw.BoxFit.contain),
-            pw.SizedBox(height: 40),
-            pw.Image(pw.MemoryImage(back), width: 360, fit: pw.BoxFit.contain),
+            if (real) pw.SizedBox(height: 40),
+            card(front),
+            if (back != null) ...[
+              pw.SizedBox(height: real ? 40 : 20),
+              card(back!),
+            ],
           ],
         ),
       ));
@@ -717,9 +832,12 @@ class ToolActions {
   // ------------------------------------------------------------------
 
   /// Ferramentas que se aplicam a um PDF já escolhido.
-  static Future<void> showPdfTools(BuildContext c, File f) async {
+  static Future<void> showPdfTools(BuildContext c, File f,
+      {bool fromViewer = false}) async {
     final items = <MapEntry<String, Future<void> Function()>>[
-      MapEntry('Organizar páginas', () => organize(c, file: f)),
+      MapEntry('Adicionar páginas',
+          () => addPages(c, file: f, fromViewer: fromViewer)),
+      MapEntry('Organizar / girar páginas', () => organize(c, file: f)),
       MapEntry('Dividir PDF', () => split(c, file: f)),
       MapEntry('Assinar', () => sign(c, file: f)),
       MapEntry('Marca d\'água', () => watermark(c, file: f)),

@@ -58,7 +58,24 @@ class PdfTools {
     final bytes = await out.save();
     out.dispose();
     src.dispose();
-    return Uint8List.fromList(bytes);
+    final rot = (a['rot'] as List?)?.cast<int>();
+    if (rot == null || rot.every((r) => r % 360 == 0)) {
+      return Uint8List.fromList(bytes);
+    }
+    // Giro: reabre o PDF pronto e define a rotação de cada página.
+    final d = PdfDocument(inputBytes: Uint8List.fromList(bytes));
+    for (var i = 0; i < d.pages.count && i < rot.length; i++) {
+      final r = ((rot[i] % 360) + 360) % 360;
+      if (r == 0) continue;
+      d.pages[i].rotation = r == 90
+          ? PdfPageRotateAngle.rotateAngle90
+          : r == 180
+              ? PdfPageRotateAngle.rotateAngle180
+              : PdfPageRotateAngle.rotateAngle270;
+    }
+    final rotated = await d.save();
+    d.dispose();
+    return Uint8List.fromList(rotated);
   }
 
   static Future<Uint8List> protect(Map a) async {

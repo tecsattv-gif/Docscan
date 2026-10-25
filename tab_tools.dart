@@ -32,7 +32,10 @@ class ToolsTab extends StatelessWidget {
         _T(Icons.description_outlined, 'PDF para Word', () => ToolActions.toWord(c)),
       ],
       'Editar': [
+        _T(Icons.add_a_photo_outlined, 'Adicionar páginas', () => ToolActions.addPages(c)),
         _T(Icons.view_carousel_outlined, 'Organizar páginas', () => ToolActions.organize(c)),
+        _T(Icons.rotate_right, 'Girar páginas', () => ToolActions.organize(c)),
+        _T(Icons.call_split, 'Dividir PDF', () => ToolActions.split(c)),
         _T(Icons.merge_type, 'Mesclar PDFs', () => ToolActions.merge(c)),
         _T(Icons.draw_outlined, 'Assinar', () => ToolActions.sign(c)),
         _T(Icons.water_drop_outlined, 'Marca d\'água', () => ToolActions.watermark(c)),

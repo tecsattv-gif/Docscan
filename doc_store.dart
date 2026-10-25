@@ -116,6 +116,14 @@ class DocStore {
   /// orientation: 0 = automático, 1 = retrato, 2 = paisagem.
   static Future<File> saveImagesAsPdf(List<Uint8List> images, String name,
       {int pageSize = 0, int orientation = 0, bool margin = false}) async {
+    final bytes = await imagesToPdfBytes(images,
+        pageSize: pageSize, orientation: orientation, margin: margin);
+    return saveBytes(bytes, name);
+  }
+
+  /// Monta o PDF das imagens sem salvar na lista (usado em "Adicionar páginas").
+  static Future<Uint8List> imagesToPdfBytes(List<Uint8List> images,
+      {int pageSize = 0, int orientation = 0, bool margin = false}) async {
     final pdf = pw.Document();
     final base = _pageSizes[pageSize.clamp(0, _pageSizes.length - 1)];
     for (final b in images) {
@@ -142,7 +150,15 @@ class DocStore {
                 fit: base == null ? pw.BoxFit.fill : pw.BoxFit.contain)),
       ));
     }
-    return saveBytes(await pdf.save(), name);
+    return pdf.save();
+  }
+
+  /// Substitui o conteúdo de um documento existente (mantém o mesmo nome).
+  static Future<void> overwrite(File f, Uint8List bytes) async {
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsBytes(bytes, flush: true);
+    await tmp.rename(f.path);
+    notify();
   }
 
   static Future<File> importPdf(String sourcePath) async {
