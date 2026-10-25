@@ -349,7 +349,7 @@ class ImageOps {
 
     // máximo apaga o texto; mínimo devolve as bordas das sombras ao lugar;
     // média suaviza o fundo.
-    final r = (math.max(sw, sh) / 90).round().clamp(3, 9);
+    final r = (math.max(sw, sh) / 120).round().clamp(3, 9);
     final bg = [
       for (final a in ch) f2(f2(f2(f2(a, r, 0), r, 1), 3, 2), 3, 2)
     ];
@@ -368,7 +368,7 @@ class ImageOps {
     }
 
     // curva suave: dobras fracas somem no branco, texto fica escuro
-    const lo = 0.25, hi = 0.72;
+    const lo = 0.40, hi = 0.85;
     for (final p in im) {
       final gx = p.x * k - 0.5, gy = p.y * k - 0.5;
       final v = <double>[
@@ -382,9 +382,9 @@ class ImageOps {
       }
       // mantém as cores (carimbos, caneta azul) um pouco reforçadas
       final l = 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2];
-      p.r = _cl((l + (v[0] - l) * 1.3) * 255);
-      p.g = _cl((l + (v[1] - l) * 1.3) * 255);
-      p.b = _cl((l + (v[2] - l) * 1.3) * 255);
+      p.r = _cl((l + (v[0] - l) * 1.6) * 255);
+      p.g = _cl((l + (v[1] - l) * 1.6) * 255);
+      p.b = _cl((l + (v[2] - l) * 1.6) * 255);
     }
   }
 
