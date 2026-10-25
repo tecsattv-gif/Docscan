@@ -442,6 +442,69 @@ class ToolActions {
     open(c, out);
   }
 
+  /// Lê "1-3, 5, 7-9" e devolve grupos de páginas (0-based). Null = inválido.
+  static List<List<int>>? _parseRanges(String s, int n) {
+    final groups = <List<int>>[];
+    for (final part in s.split(RegExp(r'[,;]'))) {
+      final t = part.replaceAll(' ', '');
+      if (t.isEmpty) continue;
+      final m = RegExp(r'^(\d+)(?:-(\d+))?$').firstMatch(t);
+      if (m == null) return null;
+      final a = int.parse(m.group(1)!);
+      final b = m.group(2) == null ? a : int.parse(m.group(2)!);
+      if (a < 1 || b < a || b > n) return null;
+      groups.add([for (var i = a - 1; i < b; i++) i]);
+    }
+    return groups.isEmpty ? null : groups;
+  }
+
+  static Future<void> split(BuildContext c, {File? file}) async {
+    final f = await _pdf(c, file, title: 'Dividir qual PDF?');
+    if (f == null || !c.mounted) return;
+    final bytes = await f.readAsBytes();
+    final n = await Busy.run<int>(
+        c, 'Abrindo PDF...', () => compute(PdfTools.pageCount, bytes));
+    if (n == null || !c.mounted) return;
+    if (n < 2) {
+      toast(c, 'Este PDF só tem 1 página');
+      return;
+    }
+    final mode = await choose(c, 'Dividir ($n páginas)', [
+      'Uma página por arquivo',
+      'Escolher intervalos (ex: 1-3, 4-$n)',
+    ]);
+    if (mode == null || !c.mounted) return;
+    List<List<int>> groups;
+    if (mode == 0) {
+      groups = [for (var i = 0; i < n; i++) [i]];
+    } else {
+      final t = await askText(c, 'Páginas de cada arquivo',
+          hint: 'ex: 1-3, 4-$n  (vírgula separa os arquivos)');
+      if (t == null || t.isEmpty || !c.mounted) return;
+      final g = _parseRanges(t, n);
+      if (g == null) {
+        toast(c, 'Intervalo inválido. Use algo como 1-3, 4-$n');
+        return;
+      }
+      groups = g;
+    }
+    final base = docName(f);
+    final made = await Busy.run<int>(c, 'Dividindo PDF...', () async {
+      var k = 0;
+      for (final g in groups) {
+        final out = await compute(PdfTools.pick, {'pdf': bytes, 'pages': g});
+        final label = g.length == 1
+            ? 'pág ${g.first + 1}'
+            : 'págs ${g.first + 1}-${g.last + 1}';
+        await DocStore.saveBytes(out, '$base ($label)');
+        k++;
+      }
+      return k;
+    });
+    if (made == null || !c.mounted) return;
+    toast(c, '$made arquivo(s) criados na lista de documentos');
+  }
+
   static Future<void> dateStamp(BuildContext c, {File? file}) async {
     final f = await _pdf(c, file, title: 'Carimbar qual PDF?');
     if (f == null || !c.mounted) return;
@@ -657,6 +720,7 @@ class ToolActions {
   static Future<void> showPdfTools(BuildContext c, File f) async {
     final items = <MapEntry<String, Future<void> Function()>>[
       MapEntry('Organizar páginas', () => organize(c, file: f)),
+      MapEntry('Dividir PDF', () => split(c, file: f)),
       MapEntry('Assinar', () => sign(c, file: f)),
       MapEntry('Marca d\'água', () => watermark(c, file: f)),
       MapEntry('Carimbo de data e hora', () => dateStamp(c, file: f)),

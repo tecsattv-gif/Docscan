@@ -34,6 +34,7 @@ class ToolsTab extends StatelessWidget {
       'Editar': [
         _T(Icons.view_carousel_outlined, 'Organizar páginas', () => ToolActions.organize(c)),
         _T(Icons.merge_type, 'Mesclar PDFs', () => ToolActions.merge(c)),
+        _T(Icons.call_split, 'Dividir PDF', () => ToolActions.split(c)),
         _T(Icons.draw_outlined, 'Assinar', () => ToolActions.sign(c)),
         _T(Icons.water_drop_outlined, 'Marca d\'água', () => ToolActions.watermark(c)),
         _T(Icons.schedule, 'Carimbo de data', () => ToolActions.dateStamp(c)),
@@ -95,7 +96,7 @@ class _ToolButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration:
-              BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(12)),
+              BoxDecoration(color: context.card, borderRadius: BorderRadius.circular(12)),
           padding: const EdgeInsets.all(8),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(t.icon, color: kTeal, size: 28),

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -50,6 +51,37 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
     super.dispose();
   }
 
+  /// Fonte completa (DejaVu), colocada em assets/fonts pelo GitHub Actions.
+  /// Se não existir, volta à fonte padrão do PDF.
+  static pw.ThemeData? _fontTheme;
+  static Future<pw.ThemeData?> _loadFont() async {
+    if (_fontTheme != null) return _fontTheme;
+    try {
+      final base = pw.Font.ttf(await rootBundle.load('assets/fonts/DejaVuSans.ttf'));
+      final bold =
+          pw.Font.ttf(await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf'));
+      _fontTheme = pw.ThemeData.withFont(base: base, bold: bold);
+    } catch (_) {
+      _fontTheme = null;
+    }
+    return _fontTheme;
+  }
+
+  /// Com a fonte completa só tira emojis (ela não tem); sem ela, a fonte
+  /// padrão do PDF só tem caracteres latinos, então troca o resto.
+  static String _clean(String s, bool fullFont) {
+    if (!fullFont) return _safe(s);
+    final b = StringBuffer();
+    for (final r in s.runes) {
+      if (r == 9) {
+        b.write('    ');
+      } else if (r == 10 || (r >= 32 && r <= 0xFFFF && (r < 0xD800 || r > 0xDFFF))) {
+        b.writeCharCode(r);
+      }
+    }
+    return b.toString();
+  }
+
   /// As fontes padrão do PDF só têm caracteres latinos; troca os símbolos
   /// mais comuns e substitui o resto para não dar erro.
   static String _safe(String s) {
@@ -85,9 +117,11 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
     final base = DocStore.pageFormatAt(_size);
     final fmt = _landscape ? base.landscape : base.portrait;
     final margin = _margins ? 2.0 * PdfPageFormat.cm : 0.5 * PdfPageFormat.cm;
-    final doc = pw.Document();
-    final title = _safe(_title.text.trim());
-    final body = _safe(_body.text);
+    final theme = await _loadFont();
+    final full = theme != null;
+    final doc = pw.Document(theme: theme);
+    final title = _clean(_title.text.trim(), full);
+    final body = _clean(_body.text, full);
 
     if (title.isEmpty && body.trim().isEmpty && _images.isEmpty) {
       for (var i = 0; i < _blankPages; i++) {
