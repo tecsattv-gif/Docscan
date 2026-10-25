@@ -152,6 +152,46 @@ class PdfTools {
     return Uint8List.fromList(bytes);
   }
 
+  /// Marca d'água com imagem (logo, foto, assinatura...).
+  /// corner=false: grande e transparente no centro da página.
+  /// corner=true: pequena no canto inferior direito.
+  static Future<Uint8List> watermarkImage(Map a) async {
+    final src = PdfDocument(inputBytes: a['pdf'] as Uint8List);
+    final d = _rebuild(src);
+    final bmp = PdfBitmap(a['img'] as Uint8List);
+    final ar = bmp.width / math.max(bmp.height, 1);
+    final corner = a['corner'] == true;
+    for (var i = 0; i < d.pages.count; i++) {
+      final page = d.pages[i];
+      final g = page.graphics;
+      final size = page.getClientSize();
+      // cabe dentro de uma caixa (maxW x maxH) mantendo a proporção
+      final maxW = size.width * (corner ? 0.20 : 0.70);
+      final maxH = size.height * (corner ? 0.12 : 0.60);
+      var w = maxW, h = maxW / ar;
+      if (h > maxH) {
+        h = maxH;
+        w = maxH * ar;
+      }
+      g.save();
+      if (corner) {
+        final m = size.width * 0.03;
+        g.setTransparency(0.85);
+        g.drawImage(bmp,
+            Rect.fromLTWH(size.width - w - m, size.height - h - m, w, h));
+      } else {
+        g.setTransparency(0.22);
+        g.drawImage(bmp, Rect.fromLTWH(
+            (size.width - w) / 2, (size.height - h) / 2, w, h));
+      }
+      g.restore();
+    }
+    final bytes = await d.save();
+    d.dispose();
+    src.dispose();
+    return Uint8List.fromList(bytes);
+  }
+
   /// Carimbo de data/hora: caixa vermelha bem visível no canto inferior
   /// direito de cada página.
   static Future<Uint8List> dateStamp(Map a) async {

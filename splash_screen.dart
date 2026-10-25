@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 
+/// Versão mostrada na abertura. Atualize junto com "version:" no pubspec.yaml.
+const kAppVersion = '2.0.0';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -22,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _c.forward();
-    _timer = Timer(const Duration(milliseconds: 2200), () {
+    _timer = Timer(const Duration(milliseconds: 2800), () {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 400),
@@ -44,27 +47,59 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1C1C1E),
-      body: Center(
-        child: FadeTransition(
-          opacity: _fade,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset('assets/logo.png', width: 128, height: 128),
-                const SizedBox(height: 24),
-                const Text('DocScan',
-                    style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white)),
-                const SizedBox(height: 8),
-                const Text('Digitalize. Organize. Compartilhe.',
-                    style: TextStyle(fontSize: 14, color: Colors.white60)),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: FadeTransition(
+                  opacity: _fade,
+                  child: ScaleTransition(
+                    scale: _scale,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset('assets/logo.png', width: 128, height: 128),
+                        const SizedBox(height: 24),
+                        const Text('DocScan',
+                            style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white)),
+                        const SizedBox(height: 8),
+                        const Text('Digitalize. Organize. Compartilhe.',
+                            style:
+                                TextStyle(fontSize: 14, color: Colors.white60)),
+                        const SizedBox(height: 12),
+                        const Text('Versão $kAppVersion',
+                            style:
+                                TextStyle(fontSize: 13, color: Colors.white38)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+            FadeTransition(
+              opacity: _fade,
+              child: const Padding(
+                padding: EdgeInsets.only(bottom: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Criado por Luiz Alberto Cardoso',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70)),
+                    SizedBox(height: 4),
+                    Text('Email: tecsattv@gmail.com',
+                        style: TextStyle(fontSize: 13, color: Colors.white54)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

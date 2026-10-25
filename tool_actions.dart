@@ -371,8 +371,39 @@ class ToolActions {
   static Future<void> watermark(BuildContext c, {File? file}) async {
     final f = await _pdf(c, file, title: 'Marca d\'água em qual PDF?');
     if (f == null || !c.mounted) return;
-    final text = await askText(c, 'Texto da marca d\'água', hint: 'Ex.: CONFIDENCIAL');
+    final kind = await choose(c, 'Tipo de marca d\'água',
+        ['Texto ou nome', 'Imagem (logo, foto...)']);
+    if (kind == null || !c.mounted) return;
+
+    if (kind == 1) {
+      // ---- marca com imagem ----
+      final x = await _picker.pickImage(
+          source: ImageSource.gallery, imageQuality: 90, maxWidth: 1600);
+      if (x == null || !c.mounted) return;
+      final img = await x.readAsBytes();
+      if (!c.mounted) return;
+      final style = await choose(c, 'Estilo',
+          ['Grande e transparente no centro', 'Pequena no canto']);
+      if (style == null || !c.mounted) return;
+      final out = await Busy.run<File>(c, 'Aplicando marca d\'água...', () async {
+        final r = await compute(PdfTools.watermarkImage,
+            {'pdf': await f.readAsBytes(), 'img': img, 'corner': style == 1});
+        return DocStore.saveBytes(r, '${docName(f)} (marca)');
+      });
+      if (out == null || !c.mounted) return;
+      open(c, out);
+      return;
+    }
+
+    // ---- marca com texto (lembra o último texto usado) ----
+    final prefs = await SharedPreferences.getInstance();
+    if (!c.mounted) return;
+    final text = await askText(c, 'Texto da marca d\'água',
+        initial: prefs.getString('wm_text') ?? '',
+        hint: 'Ex.: CONFIDENCIAL ou seu nome');
     if (text == null || text.isEmpty || !c.mounted) return;
+    await prefs.setString('wm_text', text);
+    if (!c.mounted) return;
     final style = await choose(c, 'Estilo', ['Diagonal grande', 'Pequena no canto']);
     if (style == null || !c.mounted) return;
     final out = await Busy.run<File>(c, 'Aplicando marca d\'água...', () async {
