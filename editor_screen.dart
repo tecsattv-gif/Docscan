@@ -19,6 +19,8 @@ class _EditorScreenState extends State<EditorScreen> {
   Uint8List? _cropped;
   Uint8List? _shown;
   bool _crop = true;
+  // lembra a escolha enquanto o app estiver aberto
+  static bool _curved = false;
   bool _busy = false;
   String _mode = 'magic';
   Size? _imgSize;
@@ -89,7 +91,8 @@ class _EditorScreenState extends State<EditorScreen> {
         coords.add(o.dx);
         coords.add(o.dy);
       }
-      _cropped = await compute(ImageOps.warp, {'bytes': _base, 'c': coords});
+      _cropped = await compute(_curved ? ImageOps.warpCurved : ImageOps.warp,
+          {'bytes': _base, 'c': coords});
       _crop = false;
       await _applyFilter();
     } catch (e) {
@@ -246,8 +249,18 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _cropBar() {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      const Text('Arraste os 4 pontos até os cantos do documento',
-          style: TextStyle(color: Colors.white70, fontSize: 13)),
+      Row(children: [
+        const Expanded(
+          child: Text('Arraste os 4 pontos até os cantos do documento',
+              style: TextStyle(color: Colors.white70, fontSize: 13)),
+        ),
+        FilterChip(
+          label: const Text('Esticar folha torta'),
+          tooltip: 'Segue as bordas tortas do papel e estica a folha',
+          selected: _curved,
+          onSelected: _busy ? null : (v) => setState(() => _curved = v),
+        ),
+      ]),
       const SizedBox(height: 10),
       Row(children: [
         IconButton(

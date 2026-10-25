@@ -108,6 +108,154 @@ class ImageOps {
     return Uint8List.fromList(img.encodeJpg(out, quality: 92));
   }
 
+  /// Recorte que segue as bordas TORTAS do papel (folha ondulada/curvada).
+  /// Parte dos 4 cantos (c = 8 valores normalizados TL, TR, BR, BL), acha a
+  /// borda real do papel ao longo de cada lado e estica a folha para um
+  /// retângulo (interpolação de Coons). Se não achar a borda num ponto,
+  /// usa a linha reta ali (igual ao recorte normal).
+  static Uint8List warpCurved(Map a) {
+    final src = img.decodeImage(a['bytes'] as Uint8List);
+    if (src == null) throw Exception('Imagem inválida');
+    final c = (a['c'] as List).map((e) => (e as num).toDouble()).toList();
+    final sw = src.width, sh = src.height;
+    final px = <double>[c[0] * sw, c[2] * sw, c[4] * sw, c[6] * sw];
+    final py = <double>[c[1] * sh, c[3] * sh, c[5] * sh, c[7] * sh];
+
+    // máscara do papel (claro x fundo) numa versão pequena, limiar de Otsu
+    final kk = math.min(1.0, 500 / math.max(sw, sh));
+    final sm = img.copyResize(src,
+        width: math.max(8, (sw * kk).round()),
+        height: math.max(8, (sh * kk).round()),
+        interpolation: img.Interpolation.average);
+    final mw = sm.width, mh = sm.height;
+    final gray = Uint8List(mw * mh);
+    final hist = List<int>.filled(256, 0);
+    for (final p in sm) {
+      final l = _cl(0.299 * p.r + 0.587 * p.g + 0.114 * p.b);
+      gray[p.y * mw + p.x] = l;
+      hist[l]++;
+    }
+    final total = mw * mh;
+    var sumAll = 0.0;
+    for (var i = 0; i < 256; i++) {
+      sumAll += i * hist[i];
+    }
+    var wB = 0, sumB = 0.0, best = 0.0, thr = 128;
+    for (var t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (wB == 0) continue;
+      final wF = total - wB;
+      if (wF == 0) break;
+      sumB += t * hist[t];
+      final mB = sumB / wB, mF = (sumAll - sumB) / wF;
+      final between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > best) {
+        best = between;
+        thr = t;
+      }
+    }
+    bool paper(double x, double y) {
+      final xi = (x * kk).floor(), yi = (y * kk).floor();
+      if (xi < 0 || yi < 0 || xi >= mw || yi >= mh) return false;
+      return gray[yi * mw + xi] > thr;
+    }
+
+    // Um lado: N pontos ao longo da linha reta a->b; para cada um procura a
+    // borda do papel vindo de FORA para dentro, pela normal externa.
+    const n = 40;
+    List<List<double>> side(int ia, int ib) {
+      final ax = px[ia], ay = py[ia], bx = px[ib], by = py[ib];
+      final len = math.max(1.0, math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)));
+      final tx = (bx - ax) / len, ty = (by - ay) / len;
+      final nx = ty, ny = -tx; // normal para fora (cantos em sentido horário)
+      final r = len * 0.12;
+      final step = 1 / kk;
+      final off = List<double>.filled(n, 0);
+      for (var i = 1; i < n - 1; i++) {
+        final u = i / (n - 1);
+        final bxp = ax + (bx - ax) * u, byp = ay + (by - ay) * u;
+        // já é papel no ponto mais externo: não dá para saber onde é a borda
+        if (paper(bxp + nx * r, byp + ny * r)) continue;
+        for (var o = r; o > -r; o -= step) {
+          if (paper(bxp + nx * o, byp + ny * o) &&
+              paper(bxp + nx * (o - step), byp + ny * (o - step))) {
+            off[i] = o;
+            break;
+          }
+        }
+      }
+      // suaviza só o deslocamento (a posição ao longo do lado não muda)
+      final smo = List<double>.filled(n, 0);
+      for (var i = 1; i < n - 1; i++) {
+        var s = 0.0, k = 0;
+        for (var j = i - 2; j <= i + 2; j++) {
+          if (j < 0 || j >= n) continue;
+          s += off[j];
+          k++;
+        }
+        smo[i] = s / k;
+      }
+      return [
+        for (var i = 0; i < n; i++)
+          [
+            ax + (bx - ax) * i / (n - 1) + nx * smo[i],
+            ay + (by - ay) * i / (n - 1) + ny * smo[i],
+          ]
+      ];
+    }
+
+    final top = side(0, 1); // TL -> TR
+    final right = side(1, 2); // TR -> BR
+    final bot = side(2, 3).reversed.toList(); // BL -> BR
+    final left = side(3, 0).reversed.toList(); // TL -> BL
+
+    double lenOf(List<List<double>> e) {
+      var s = 0.0;
+      for (var i = 1; i < e.length; i++) {
+        final dx = e[i][0] - e[i - 1][0], dy = e[i][1] - e[i - 1][1];
+        s += math.sqrt(dx * dx + dy * dy);
+      }
+      return s;
+    }
+
+    var w = math.max(lenOf(top), lenOf(bot));
+    var h = math.max(lenOf(left), lenOf(right));
+    final k = math.min(1.0, maxSide / math.max(w, h));
+    final ow = math.max(2, (w * k).round());
+    final oh = math.max(2, (h * k).round());
+
+    List<double> at(List<List<double>> e, double u) {
+      final f = u * (e.length - 1);
+      final i = f.floor().clamp(0, e.length - 2).toInt();
+      final t = f - i;
+      return [
+        e[i][0] + (e[i + 1][0] - e[i][0]) * t,
+        e[i][1] + (e[i + 1][1] - e[i][1]) * t,
+      ];
+    }
+
+    const ins = 0.01;
+    final us = [for (var i = 0; i < ow; i++) ins + (i + 0.5) / ow * (1 - 2 * ins)];
+    final vs = [for (var j = 0; j < oh; j++) ins + (j + 0.5) / oh * (1 - 2 * ins)];
+    final tp = [for (final u in us) at(top, u)];
+    final bp = [for (final u in us) at(bot, u)];
+    final lp = [for (final v in vs) at(left, v)];
+    final rp = [for (final v in vs) at(right, v)];
+    final out = img.Image(width: ow, height: oh);
+    for (var j = 0; j < oh; j++) {
+      final v = vs[j];
+      for (var i = 0; i < ow; i++) {
+        final u = us[i];
+        final fx = (1 - v) * tp[i][0] + v * bp[i][0] + (1 - u) * lp[j][0] + u * rp[j][0] -
+            ((1 - u) * (1 - v) * px[0] + u * (1 - v) * px[1] + u * v * px[2] + (1 - u) * v * px[3]);
+        final fy = (1 - v) * tp[i][1] + v * bp[i][1] + (1 - u) * lp[j][1] + u * rp[j][1] -
+            ((1 - u) * (1 - v) * py[0] + u * (1 - v) * py[1] + u * v * py[2] + (1 - u) * v * py[3]);
+        _put(src, out, i, j, fx - 0.5, fy - 0.5);
+      }
+    }
+    return Uint8List.fromList(img.encodeJpg(out, quality: 92));
+  }
+
   static void _put(
       img.Image src, img.Image out, int ox, int oy, double fx, double fy) {
     final w = src.width, h = src.height;
