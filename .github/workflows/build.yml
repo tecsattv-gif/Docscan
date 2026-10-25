@@ -14,11 +14,14 @@ jobs:
       - name: Organizar arquivos
         run: |
           mkdir -p lib/screens lib/services assets
-          [ -f main.dart ] && mv main.dart lib/main.dart || true
-          [ -f home_screen.dart ] && mv home_screen.dart lib/screens/ || true
-          [ -f splash_screen.dart ] && mv splash_screen.dart lib/screens/ || true
-          [ -f viewer_screen.dart ] && mv viewer_screen.dart lib/screens/ || true
-          [ -f doc_store.dart ] && mv doc_store.dart lib/services/ || true
+          for f in *.dart; do
+            [ -e "$f" ] || continue
+            case "$f" in
+              main.dart) mv "$f" lib/ ;;
+              doc_store.dart|image_ops.dart|pdf_tools.dart) mv "$f" lib/services/ ;;
+              *) mv "$f" lib/screens/ ;;
+            esac
+          done
           [ -f logo_docscan.png ] && mv logo_docscan.png assets/logo.png || true
 
       - uses: actions/setup-java@v4
@@ -67,9 +70,17 @@ jobs:
           GRV
           fi
 
-      - run: flutter pub get
+      - name: Icone e nome do app
+        continue-on-error: true
+        run: |
+          sed -i 's/android:label="docscan"/android:label="DocScan"/' android/app/src/main/AndroidManifest.xml || true
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            d="${pair%%:*}"; s="${pair##*:}"
+            mkdir -p "android/app/src/main/res/mipmap-$d"
+            convert assets/logo.png -resize ${s}x${s} "android/app/src/main/res/mipmap-$d/ic_launcher.png"
+          done
 
-      # - run: dart run flutter_native_splash:create
+      - run: flutter pub get
 
       - run: flutter build apk --release
 
