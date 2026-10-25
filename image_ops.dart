@@ -154,10 +154,11 @@ class ImageOps {
   }
 
   /// Remove sombras/iluminação irregular estimando o fundo (papel) e
-  /// normalizando. Deixa o papel branco e o texto mais forte.
+  /// dividindo a imagem por ele. Deixa o papel branco e o texto forte.
   static void _normalize(img.Image im, {required bool bw}) {
     final w = im.width, h = im.height;
-    const s = 16;
+    // tamanho do bloco proporcional à imagem
+    final s = (math.max(w, h) / 110).round().clamp(8, 24);
     final sw = (w / s).ceil(), sh = (h / s).ceil();
     final n = sw * sh;
     final sumL = List<double>.filled(n, 0);
@@ -167,7 +168,8 @@ class ImageOps {
       sumL[b] += 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
       cnt[b]++;
     }
-    final meanL = List<double>.generate(n, (i) => cnt[i] == 0 ? 0 : sumL[i] / cnt[i]);
+    final meanL =
+        List<double>.generate(n, (i) => cnt[i] == 0 ? 0 : sumL[i] / cnt[i]);
     final bgR = List<double>.filled(n, 0);
     final bgG = List<double>.filled(n, 0);
     final bgB = List<double>.filled(n, 0);
@@ -191,18 +193,19 @@ class ImageOps {
         bgR[i] = bgG[i] = bgB[i] = 255;
       }
     }
-    // máximo local (ignora texto grosso) e suavização
-    List<double> maxf(List<double> a) {
+
+    // máximo/mínimo local entre blocos
+    List<double> rank(List<double> a, int r, bool takeMax) {
       final o = List<double>.filled(n, 0);
       for (var by = 0; by < sh; by++) {
         for (var bx = 0; bx < sw; bx++) {
-          var m = 0.0;
-          for (var dy = -2; dy <= 2; dy++) {
-            for (var dx = -2; dx <= 2; dx++) {
-              final yy = by + dy, xx = bx + dx;
-              if (yy < 0 || xx < 0 || yy >= sh || xx >= sw) continue;
+          var m = takeMax ? -1.0 : 1e9;
+          for (var dy = -r; dy <= r; dy++) {
+            final yy = (by + dy).clamp(0, sh - 1);
+            for (var dx = -r; dx <= r; dx++) {
+              final xx = (bx + dx).clamp(0, sw - 1);
               final v = a[yy * sw + xx];
-              if (v > m) m = v;
+              if (takeMax ? v > m : v < m) m = v;
             }
           }
           o[by * sw + bx] = m;
@@ -231,12 +234,16 @@ class ImageOps {
       return o;
     }
 
-    final fR = blur(maxf(bgR));
-    final fG = blur(maxf(bgG));
-    final fB = blur(maxf(bgB));
+    // "fechamento": máximo (apaga o texto) seguido de mínimo (devolve a
+    // borda da sombra ao lugar certo, sem o halo escuro em volta).
+    List<double> bgOf(List<double> a) =>
+        blur(blur(rank(rank(a, 2, true), 2, false)));
+    final fR = bgOf(bgR);
+    final fG = bgOf(bgG);
+    final fB = bgOf(bgB);
 
     double samp(List<double> a, double gx, double gy) {
-      var x0 = gx.floor(), y0 = gy.floor();
+      final x0 = gx.floor(), y0 = gy.floor();
       final tx = gx - x0, ty = gy - y0;
       int cx(int v) => v < 0 ? 0 : (v >= sw ? sw - 1 : v);
       int cy(int v) => v < 0 ? 0 : (v >= sh ? sh - 1 : v);
@@ -248,7 +255,7 @@ class ImageOps {
           (a01 * (1 - tx) + a11 * tx) * ty;
     }
 
-    const lo = 0.42, hi = 0.93;
+    const lo = 0.30, hi = 0.86;
     for (final p in im) {
       final gx = p.x / s - 0.5, gy = p.y / s - 0.5;
       final br = math.max(samp(fR, gx, gy), 1.0);
@@ -270,6 +277,220 @@ class ImageOps {
         p.b = _cl((rb - lo) / (hi - lo) * 255);
       }
     }
+  }
+
+  /// Detecta automaticamente os 4 cantos do documento.
+  /// Devolve 8 valores normalizados (TL, TR, BR, BL) ou lista vazia.
+  static List<double> detectCorners(Uint8List bytes) {
+    final src = img.decodeImage(bytes);
+    if (src == null) return const [];
+    final k = 320 / math.max(src.width, src.height);
+    final w = math.max(8, (src.width * k).round());
+    final h = math.max(8, (src.height * k).round());
+    final sm = img.copyResize(src,
+        width: w, height: h, interpolation: img.Interpolation.average);
+    final n = w * h;
+
+    // "brancura": claro e pouco colorido
+    final s = Float64List(n);
+    for (final p in sm) {
+      final r = p.r.toDouble(), g = p.g.toDouble(), b = p.b.toDouble();
+      final mx = math.max(r, math.max(g, b));
+      final mn = math.min(r, math.min(g, b));
+      s[p.y * w + p.x] = 0.299 * r + 0.587 * g + 0.114 * b - 0.5 * (mx - mn);
+    }
+
+    // média e desvio em janela 5x5 (imagem integral)
+    final iw = w + 1;
+    final ii = Float64List(iw * (h + 1));
+    final i2 = Float64List(iw * (h + 1));
+    for (var y = 0; y < h; y++) {
+      var rs = 0.0, rq = 0.0;
+      for (var x = 0; x < w; x++) {
+        final v = s[y * w + x];
+        rs += v;
+        rq += v * v;
+        ii[(y + 1) * iw + x + 1] = ii[y * iw + x + 1] + rs;
+        i2[(y + 1) * iw + x + 1] = i2[y * iw + x + 1] + rq;
+      }
+    }
+    final v = Float64List(n);
+    final sd = Float64List(n);
+    for (var y = 0; y < h; y++) {
+      final y0 = math.max(0, y - 2), y1 = math.min(h, y + 3);
+      for (var x = 0; x < w; x++) {
+        final x0 = math.max(0, x - 2), x1 = math.min(w, x + 3);
+        final c = ((y1 - y0) * (x1 - x0)).toDouble();
+        final a = ii[y1 * iw + x1] - ii[y0 * iw + x1] - ii[y1 * iw + x0] + ii[y0 * iw + x0];
+        final q = i2[y1 * iw + x1] - i2[y0 * iw + x1] - i2[y1 * iw + x0] + i2[y0 * iw + x0];
+        final m = a / c;
+        v[y * w + x] = m;
+        sd[y * w + x] = math.sqrt(math.max(0.0, q / c - m * m));
+      }
+    }
+
+    // limiar de Otsu
+    final hist = List<int>.filled(256, 0);
+    for (var i = 0; i < n; i++) {
+      hist[_cl(v[i])]++;
+    }
+    var sumAll = 0.0;
+    for (var i = 0; i < 256; i++) {
+      sumAll += i * hist[i];
+    }
+    var wb = 0, t = 128;
+    var sb = 0.0, best = 0.0;
+    for (var i = 0; i < 256; i++) {
+      wb += hist[i];
+      if (wb == 0) continue;
+      final wf = n - wb;
+      if (wf == 0) break;
+      sb += i * hist[i];
+      final mb = sb / wb, mf = (sumAll - sb) / wf;
+      final vb = wb.toDouble() * wf * (mb - mf) * (mb - mf);
+      if (vb > best) {
+        best = vb;
+        t = i;
+      }
+    }
+    var loSum = 0.0;
+    var loCnt = 0;
+    for (var i = 0; i <= t; i++) {
+      loSum += i * hist[i];
+      loCnt += hist[i];
+    }
+    final loMean = loCnt == 0 ? 0.0 : loSum / loCnt;
+    final low = loMean + 0.15 * (t - loMean);
+
+    // maior região clara = semente do papel
+    final lab = Int32List(n);
+    final queue = Int32List(n);
+    var nLab = 0, bestLab = 0, bestCnt = 0;
+    for (var i = 0; i < n; i++) {
+      if (v[i] <= t || lab[i] != 0) continue;
+      nLab++;
+      var qh = 0, qt = 0;
+      queue[qt++] = i;
+      lab[i] = nLab;
+      while (qh < qt) {
+        final c = queue[qh++];
+        final cx = c % w, cy = c ~/ w;
+        for (var d = 0; d < 4; d++) {
+          final nx = cx + (d == 0 ? 1 : d == 1 ? -1 : 0);
+          final ny = cy + (d == 2 ? 1 : d == 3 ? -1 : 0);
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          final ni = ny * w + nx;
+          if (lab[ni] == 0 && v[ni] > t) {
+            lab[ni] = nLab;
+            queue[qt++] = ni;
+          }
+        }
+      }
+      if (qt > bestCnt) {
+        bestCnt = qt;
+        bestLab = nLab;
+      }
+    }
+    if (bestLab == 0) return const [];
+
+    // cresce a região para dentro das sombras (lisas, sem textura)
+    final paper = Uint8List(n);
+    var qh = 0, qt = 0;
+    for (var i = 0; i < n; i++) {
+      if (lab[i] == bestLab) {
+        paper[i] = 1;
+        queue[qt++] = i;
+      }
+    }
+    while (qh < qt) {
+      final c = queue[qh++];
+      final cx = c % w, cy = c ~/ w;
+      for (var d = 0; d < 4; d++) {
+        final nx = cx + (d == 0 ? 1 : d == 1 ? -1 : 0);
+        final ny = cy + (d == 2 ? 1 : d == 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        final ni = ny * w + nx;
+        if (paper[ni] == 0 &&
+            v[ni] > low &&
+            sd[ni] < 8 &&
+            (v[ni] - v[c]).abs() < 10) {
+          paper[ni] = 1;
+          queue[qt++] = ni;
+        }
+      }
+    }
+
+    // preenche buracos (fundo que não toca a borda vira papel)
+    final outside = Uint8List(n);
+    qh = 0;
+    qt = 0;
+    void seedOut(int i) {
+      if (paper[i] == 0 && outside[i] == 0) {
+        outside[i] = 1;
+        queue[qt++] = i;
+      }
+    }
+
+    for (var x = 0; x < w; x++) {
+      seedOut(x);
+      seedOut((h - 1) * w + x);
+    }
+    for (var y = 0; y < h; y++) {
+      seedOut(y * w);
+      seedOut(y * w + w - 1);
+    }
+    while (qh < qt) {
+      final c = queue[qh++];
+      final cx = c % w, cy = c ~/ w;
+      for (var d = 0; d < 4; d++) {
+        final nx = cx + (d == 0 ? 1 : d == 1 ? -1 : 0);
+        final ny = cy + (d == 2 ? 1 : d == 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        seedOut(ny * w + nx);
+      }
+    }
+
+    // cantos = extremos de x+y e x-y
+    var area = 0;
+    var tl = -1, tr = -1, br = -1, bl = -1;
+    var vtl = 1 << 30, vbr = -(1 << 30), vtr = -(1 << 30), vbl = 1 << 30;
+    for (var i = 0; i < n; i++) {
+      if (outside[i] == 1) continue;
+      area++;
+      final x = i % w, y = i ~/ w;
+      final sp = x + y, df = x - y;
+      if (sp < vtl) {
+        vtl = sp;
+        tl = i;
+      }
+      if (sp > vbr) {
+        vbr = sp;
+        br = i;
+      }
+      if (df > vtr) {
+        vtr = df;
+        tr = i;
+      }
+      if (df < vbl) {
+        vbl = df;
+        bl = i;
+      }
+    }
+    final frac = area / n;
+    if (tl < 0 || frac < 0.10 || frac > 0.985) return const [];
+    final pts = <double>[];
+    for (final i in [tl, tr, br, bl]) {
+      pts.add(((i % w) + 0.5) / w);
+      pts.add(((i ~/ w) + 0.5) / h);
+    }
+    // área do quadrilátero (deve ser razoável)
+    var qa = 0.0;
+    for (var i = 0; i < 4; i++) {
+      final j = (i + 1) % 4;
+      qa += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+    }
+    if (qa.abs() / 2 < 0.08) return const [];
+    return pts;
   }
 
   /// Junta várias imagens (PNG/JPEG) numa imagem longa vertical.

@@ -118,7 +118,7 @@ class ToolActions {
           if (b != null) pages.add(b);
         }
       } catch (_) {
-        await prefs.setBool('auto_scan', false);
+        // não desliga o scanner automático para sempre por uma falha só
         autoOk = false;
         pages.clear();
         if (c.mounted) {
@@ -389,8 +389,8 @@ class ToolActions {
     if (f == null || !c.mounted) return;
     final text = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final out = await Busy.run<File>(c, 'Aplicando carimbo...', () async {
-      final r = await compute(PdfTools.watermark,
-          {'pdf': await f.readAsBytes(), 'text': text, 'corner': true});
+      final r = await compute(
+          PdfTools.dateStamp, {'pdf': await f.readAsBytes(), 'text': text});
       return DocStore.saveBytes(r, '${docName(f)} (carimbo)');
     });
     if (out == null || !c.mounted) return;

@@ -24,11 +24,12 @@ class _EditorScreenState extends State<EditorScreen> {
   Size? _imgSize;
   List<Offset> _c = _defaultCorners();
 
-  static List<Offset> _defaultCorners() => const [
-        Offset(0.06, 0.06),
-        Offset(0.94, 0.06),
-        Offset(0.94, 0.94),
-        Offset(0.06, 0.94),
+  // lista modificável (uma lista const impedia arrastar os pontos)
+  static List<Offset> _defaultCorners() => [
+        const Offset(0.06, 0.06),
+        const Offset(0.94, 0.06),
+        const Offset(0.94, 0.94),
+        const Offset(0.06, 0.94),
       ];
 
   static const _filters = <String, String>{
@@ -48,7 +49,29 @@ class _EditorScreenState extends State<EditorScreen> {
     if (!_crop) {
       _cropped = _base;
       _applyFilter();
+    } else {
+      _detect();
     }
+  }
+
+  /// Procura os cantos do documento automaticamente.
+  Future<void> _detect({bool warn = false}) async {
+    setState(() => _busy = true);
+    try {
+      final r = await compute(ImageOps.detectCorners, _base);
+      if (!mounted) return;
+      if (r.length == 8) {
+        _c = [
+          for (var i = 0; i < 4; i++) Offset(r[i * 2], r[i * 2 + 1]),
+        ];
+      } else {
+        _c = _defaultCorners();
+        if (warn) toast(context, 'Bordas não encontradas. Ajuste os pontos.');
+      }
+    } catch (_) {
+      _c = _defaultCorners();
+    }
+    if (mounted) setState(() => _busy = false);
   }
 
   Future<void> _loadSize() async {
@@ -93,9 +116,8 @@ class _EditorScreenState extends State<EditorScreen> {
     try {
       if (_crop) {
         _base = await compute(ImageOps.rotate, {'bytes': _base, 'angle': 90});
-        _c = _defaultCorners();
         await _loadSize();
-        if (mounted) setState(() => _busy = false);
+        await _detect();
       } else {
         _cropped = await compute(
             ImageOps.rotate, {'bytes': _cropped ?? _base, 'angle': 90});
@@ -110,50 +132,58 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget _cropView() {
     final size = _imgSize;
     if (size == null) return const Center(child: CircularProgressIndicator());
-    return Center(
-      child: AspectRatio(
-        aspectRatio: size.width / size.height,
-        child: LayoutBuilder(builder: (ctx, cons) {
-          final w = cons.maxWidth, h = cons.maxHeight;
-          Offset px(Offset n) => Offset(n.dx * w, n.dy * h);
-          return Stack(children: [
-            Positioned.fill(
-                child: Image.memory(_base, fit: BoxFit.fill, gaplessPlayback: true)),
-            Positioned.fill(
-                child: CustomPaint(painter: _QuadPainter(_c.map(px).toList()))),
-            for (var i = 0; i < 4; i++)
-              Positioned(
-                left: px(_c[i]).dx - 24,
-                top: px(_c[i]).dy - 24,
-                width: 48,
-                height: 48,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanUpdate: (d) {
-                    setState(() {
-                      _c[i] = Offset(
-                        ((_c[i].dx * w + d.delta.dx) / w).clamp(0.0, 1.0).toDouble(),
-                        ((_c[i].dy * h + d.delta.dy) / h).clamp(0.0, 1.0).toDouble(),
-                      );
-                    });
-                  },
-                  child: Center(
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: kTeal,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
+    return LayoutBuilder(builder: (ctx, cons) {
+      // margem para os pontos dos cantos poderem ser arrastados
+      const pad = 26.0;
+      final aw = cons.maxWidth - 2 * pad, ah = cons.maxHeight - 2 * pad;
+      final ar = size.width / size.height;
+      var w = aw, h = aw / ar;
+      if (h > ah) {
+        h = ah;
+        w = ah * ar;
+      }
+      final ox = (cons.maxWidth - w) / 2, oy = (cons.maxHeight - h) / 2;
+      Offset px(Offset n) => Offset(ox + n.dx * w, oy + n.dy * h);
+      return Stack(children: [
+        Positioned(
+            left: ox,
+            top: oy,
+            width: w,
+            height: h,
+            child: Image.memory(_base, fit: BoxFit.fill, gaplessPlayback: true)),
+        Positioned.fill(
+            child: CustomPaint(painter: _QuadPainter(_c.map(px).toList()))),
+        for (var i = 0; i < 4; i++)
+          Positioned(
+            left: px(_c[i]).dx - 26,
+            top: px(_c[i]).dy - 26,
+            width: 52,
+            height: 52,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (d) {
+                setState(() {
+                  _c[i] = Offset(
+                    (_c[i].dx + d.delta.dx / w).clamp(0.0, 1.0).toDouble(),
+                    (_c[i].dy + d.delta.dy / h).clamp(0.0, 1.0).toDouble(),
+                  );
+                });
+              },
+              child: Center(
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: kTeal.withOpacity(0.35),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: kTeal, width: 3),
                   ),
                 ),
               ),
-          ]);
-        }),
-      ),
-    );
+            ),
+          ),
+      ]);
+    });
   }
 
   @override
@@ -220,15 +250,19 @@ class _EditorScreenState extends State<EditorScreen> {
             onPressed: _busy ? null : _rotate,
             icon: const Icon(Icons.rotate_right)),
         TextButton(
+          onPressed: _busy ? null : () => _detect(warn: true),
+          child: const Text('Auto'),
+        ),
+        TextButton(
           onPressed: _busy
               ? null
-              : () => setState(() => _c = const [
-                    Offset(0, 0),
-                    Offset(1, 0),
-                    Offset(1, 1),
-                    Offset(0, 1),
+              : () => setState(() => _c = [
+                    const Offset(0, 0),
+                    const Offset(1, 0),
+                    const Offset(1, 1),
+                    const Offset(0, 1),
                   ]),
-          child: const Text('Imagem inteira'),
+          child: const Text('Inteira'),
         ),
         const Spacer(),
         FilledButton.icon(
