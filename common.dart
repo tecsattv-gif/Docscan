@@ -128,11 +128,11 @@ class Busy {
   }
 }
 
-class Thumb extends StatelessWidget {
+class DocThumb extends StatelessWidget {
   final File file;
   final double width;
   final double height;
-  const Thumb({super.key, required this.file, this.width = 48, this.height = 64});
+  const DocThumb({super.key, required this.file, this.width = 48, this.height = 64});
 
   @override
   Widget build(BuildContext context) {

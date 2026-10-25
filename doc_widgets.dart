@@ -29,7 +29,7 @@ class DocTile extends StatelessWidget {
     return ListTile(
       selected: selected,
       selectedTileColor: kTeal.withOpacity(0.18),
-      leading: Thumb(file: file),
+      leading: DocThumb(file: file),
       title: Row(children: [
         Flexible(
             child: Text(docName(file), maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -86,7 +86,7 @@ class DocCard extends StatelessWidget {
             child: Stack(children: [
               Positioned.fill(
                 child: LayoutBuilder(
-                  builder: (_, c) => Thumb(file: file, width: c.maxWidth, height: c.maxHeight),
+                  builder: (_, c) => DocThumb(file: file, width: c.maxWidth, height: c.maxHeight),
                 ),
               ),
               if (fav)

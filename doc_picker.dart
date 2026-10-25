@@ -87,7 +87,7 @@ class _DocPickerScreenState extends State<DocPickerScreen> {
                     final f = _files[i];
                     final idx = _picked.indexWhere((x) => x.path == f.path);
                     return ListTile(
-                      leading: Thumb(file: f),
+                      leading: DocThumb(file: f),
                       title: Text(docName(f), maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(fmtSize(f.lengthSync())),
                       trailing: widget.multi
