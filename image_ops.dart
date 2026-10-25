@@ -92,11 +92,13 @@ class ImageOps {
       E = y3 - y0 + hh * y3;
     }
 
+    // recorta um pouco para dentro: evita a faixa escura do fundo na borda
+    const ins = 0.01;
     final out = img.Image(width: ow, height: oh);
     for (var j = 0; j < oh; j++) {
-      final v = (j + 0.5) / oh;
+      final v = ins + (j + 0.5) / oh * (1 - 2 * ins);
       for (var i = 0; i < ow; i++) {
-        final u = (i + 0.5) / ow;
+        final u = ins + (i + 0.5) / ow * (1 - 2 * ins);
         final dn = g * u + hh * v + 1;
         final fx = (A * u + B * v + x0) / dn - 0.5;
         final fy = (D * u + E * v + y0) / dn - 0.5;
@@ -148,7 +150,11 @@ class ImageOps {
         p.b = _cl((p.b - 128) * 1.25 + 140);
       }
     } else {
-      _normalize(im, bw: mode == 'bw');
+      // tira o granulado do sensor antes de clarear o papel
+      final clean = img.gaussianBlur(im, radius: 1);
+      _normalize(clean, bw: mode == 'bw');
+      _despeckle(clean);
+      return Uint8List.fromList(img.encodeJpg(clean, quality: 90));
     }
     return Uint8List.fromList(img.encodeJpg(im, quality: 88));
   }
@@ -272,9 +278,41 @@ class ImageOps {
         p.g = v;
         p.b = v;
       } else {
-        p.r = _cl((rr - lo) / (hi - lo) * 255);
-        p.g = _cl((rg - lo) / (hi - lo) * 255);
-        p.b = _cl((rb - lo) / (hi - lo) * 255);
+        var r = (rr - lo) / (hi - lo);
+        var gg = (rg - lo) / (hi - lo);
+        var b = (rb - lo) / (hi - lo);
+        // reforça as cores (carimbos, logotipos, caneta azul)
+        final l = 0.299 * r + 0.587 * gg + 0.114 * b;
+        r = l + (r - l) * 1.4;
+        gg = l + (gg - l) * 1.4;
+        b = l + (b - l) * 1.4;
+        p.r = _cl(r * 255);
+        p.g = _cl(gg * 255);
+        p.b = _cl(b * 255);
+      }
+    }
+  }
+
+  /// Apaga pontinhos escuros isolados (ruído) que sobram no papel branco.
+  /// Um pixel escuro com poucos vizinhos escuros numa janela 5x5 não é texto.
+  static void _despeckle(img.Image im) {
+    final w = im.width, h = im.height;
+    final dark = Uint8List(w * h);
+    for (final p in im) {
+      final l = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+      if (l < 220) dark[p.y * w + p.x] = 1;
+    }
+    for (var y = 2; y < h - 2; y++) {
+      for (var x = 2; x < w - 2; x++) {
+        if (dark[y * w + x] == 0) continue;
+        var nb = 0;
+        for (var dy = -2; dy <= 2 && nb <= 5; dy++) {
+          final row = (y + dy) * w + x;
+          for (var dx = -2; dx <= 2; dx++) {
+            nb += dark[row + dx];
+          }
+        }
+        if (nb <= 5) im.setPixelRgb(x, y, 255, 255, 255);
       }
     }
   }

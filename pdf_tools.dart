@@ -102,7 +102,7 @@ class PdfTools {
   static Future<Uint8List> watermark(Map a) async {
     final src = PdfDocument(inputBytes: a['pdf'] as Uint8List);
     final d = _rebuild(src);
-    final text = a['text'] as String;
+    final text = (a['text'] as String).trim();
     final corner = a['corner'] == true;
     for (var i = 0; i < d.pages.count; i++) {
       final page = d.pages[i];
@@ -110,31 +110,39 @@ class PdfTools {
       final size = page.getClientSize();
       g.save();
       if (corner) {
-        final fs = (size.width * 0.018).clamp(8.0, 24.0).toDouble();
-        g.drawString(
-          text,
-          PdfStandardFont(PdfFontFamily.helvetica, fs),
-          brush: PdfBrushes.darkGray,
-          bounds: Rect.fromLTWH(
-              size.width * 0.3, size.height - fs * 2.4, size.width * 0.66, fs * 1.4),
-          format: PdfStringFormat(alignment: PdfTextAlignment.right),
-        );
+        final fs = (size.width * 0.022).clamp(8.0, 24.0).toDouble();
+        final font = PdfStandardFont(PdfFontFamily.helvetica, fs);
+        final ts = font.measureString(text);
+        final m = size.width * 0.03;
+        // caixa do tamanho exato do texto: assim ele nunca é cortado
+        g.drawString(text, font,
+            brush: PdfSolidBrush(PdfColor(90, 90, 90)),
+            bounds: Rect.fromLTWH(size.width - ts.width - m - 2,
+                size.height - ts.height - m - 2, ts.width + 4, ts.height + 4));
       } else {
-        g.setTransparency(0.25);
-        final fs = (size.width * 1.1 / (math.max(text.length, 1) * 0.55))
-            .clamp(18.0, 80.0)
-            .toDouble();
+        // tamanho da letra calculado pela largura REAL do texto,
+        // para caber na diagonal da página
+        final diag = math.sqrt(size.width * size.width + size.height * size.height);
+        final probe = PdfStandardFont(PdfFontFamily.helvetica, 40,
+            style: PdfFontStyle.bold);
+        final w40 = math.max(probe.measureString(text).width, 1.0);
+        final fs = (40 * diag * 0.65 / w40).clamp(14.0, 140.0).toDouble();
+        final font = PdfStandardFont(PdfFontFamily.helvetica, fs,
+            style: PdfFontStyle.bold);
+        final ts = font.measureString(text);
+        final angle = -math.atan2(size.height, size.width) * 180 / math.pi;
+        g.setTransparency(0.30);
         g.translateTransform(size.width / 2, size.height / 2);
-        g.rotateTransform(-45);
-        g.drawString(
-          text,
-          PdfStandardFont(PdfFontFamily.helvetica, fs, style: PdfFontStyle.bold),
-          brush: PdfBrushes.gray,
-          bounds: Rect.fromLTWH(-size.width / 2, -fs / 2, size.width, fs),
-          format: PdfStringFormat(
-              alignment: PdfTextAlignment.center,
-              lineAlignment: PdfVerticalAlignment.middle),
-        );
+        g.rotateTransform(angle);
+        // caixa maior que o texto: antes ela tinha a altura exata da letra
+        // e o PDF descartava a linha (por isso a marca não aparecia)
+        g.drawString(text, font,
+            brush: PdfSolidBrush(PdfColor(120, 120, 120)),
+            bounds: Rect.fromLTWH(-ts.width / 2 - 4, -ts.height / 2 - 4,
+                ts.width + 8, ts.height + 8),
+            format: PdfStringFormat(
+                alignment: PdfTextAlignment.center,
+                lineAlignment: PdfVerticalAlignment.middle));
       }
       g.restore();
     }
