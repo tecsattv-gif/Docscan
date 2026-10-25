@@ -150,7 +150,16 @@ class ImageOps {
         p.b = _cl((p.b - 128) * 1.25 + 140);
       }
     } else if (mode == 'flatten') {
-      final clean = img.gaussianBlur(im, radius: 1);
+      // Sem desfoque: realça as bordas (nitidez) para as letras pequenas
+      // impressas e os desenhos finos não sumirem depois de clarear o papel.
+      final soft = img.gaussianBlur(im.clone(), radius: 2);
+      for (final p in im) {
+        final q = soft.getPixel(p.x, p.y);
+        p.r = _cl(p.r + (p.r - q.r) * 1.2);
+        p.g = _cl(p.g + (p.g - q.g) * 1.2);
+        p.b = _cl(p.b + (p.b - q.b) * 1.2);
+      }
+      final clean = im;
       _flatten(clean);
       // só pontinhos bem isolados: letras finas impressas ficam
       _despeckle(clean, maxNb: 2);
