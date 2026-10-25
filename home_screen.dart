@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'common.dart';
 import 'tab_docs.dart';
 import 'tab_home.dart';
@@ -15,6 +17,32 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _i = 0;
+
+  // PDFs abertos de fora ("Abrir com" / "Compartilhar")
+  static const _open = MethodChannel('docscan/open');
+
+  @override
+  void initState() {
+    super.initState();
+    _open.setMethodCallHandler((call) async {
+      if (call.method == 'fileOpened' && call.arguments is String) {
+        _show(call.arguments as String);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final p = await _open.invokeMethod<String>('initialFile');
+        if (p != null) _show(p);
+      } catch (_) {}
+    });
+  }
+
+  void _show(String path) {
+    if (!mounted) return;
+    final f = File(path);
+    if (!f.existsSync()) return;
+    ToolActions.open(context, f);
+  }
 
   @override
   Widget build(BuildContext context) {
