@@ -265,4 +265,36 @@ class PdfTools {
     src.dispose();
     return Uint8List.fromList(bytes);
   }
+
+  /// Coloca uma imagem PNG (carimbo / marca d'água) numa página ou em todas,
+  /// com transparência e rotação. x,y = centro (0..1), w = largura relativa,
+  /// ar = largura/altura da imagem, angle em graus, opacity 0..1.
+  static Future<Uint8List> overlay(Map a) async {
+    final src = PdfDocument(inputBytes: a['pdf'] as Uint8List);
+    final d = _rebuild(src);
+    final bmp = PdfBitmap(a['png'] as Uint8List);
+    final all = a['all'] == true;
+    final only = a['page'] as int;
+    final x = (a['x'] as num).toDouble(), y = (a['y'] as num).toDouble();
+    final wr = (a['w'] as num).toDouble(), ar = (a['ar'] as num).toDouble();
+    final op = (a['opacity'] as num).toDouble().clamp(0.05, 1.0).toDouble();
+    final angle = (a['angle'] as num).toDouble();
+    for (var i = 0; i < d.pages.count; i++) {
+      if (!all && i != only) continue;
+      final page = d.pages[i];
+      final g = page.graphics;
+      final size = page.getClientSize();
+      final w = wr * size.width, h = w / ar;
+      g.save();
+      if (op < 0.999) g.setTransparency(op);
+      g.translateTransform(x * size.width, y * size.height);
+      if (angle.abs() > 0.01) g.rotateTransform(angle);
+      g.drawImage(bmp, Rect.fromLTWH(-w / 2, -h / 2, w, h));
+      g.restore();
+    }
+    final bytes = await d.save();
+    d.dispose();
+    src.dispose();
+    return Uint8List.fromList(bytes);
+  }
 }

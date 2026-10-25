@@ -24,6 +24,7 @@ import 'doc_picker.dart';
 import 'editor_screen.dart';
 import 'id_reader.dart';
 import 'page_manager.dart';
+import 'place_screen.dart';
 import 'signature_screen.dart';
 import 'text_screen.dart';
 import 'viewer_screen.dart';
@@ -625,41 +626,76 @@ class ToolActions {
         ['Texto ou nome', 'Imagem (logo, foto...)']);
     if (kind == null || !c.mounted) return;
 
+    Uint8List png;
     if (kind == 1) {
-      // ---- marca com imagem ----
       final x = await _picker.pickImage(
           source: ImageSource.gallery, imageQuality: 90, maxWidth: 1600);
       if (x == null || !c.mounted) return;
-      final img = await x.readAsBytes();
+      png = await x.readAsBytes();
+    } else {
+      // lembra o último texto usado
+      final prefs = await SharedPreferences.getInstance();
       if (!c.mounted) return;
-      final style = await choose(c, 'Estilo',
-          ['Grande e transparente no centro', 'Pequena no canto']);
-      if (style == null || !c.mounted) return;
-      final out = await Busy.run<File>(c, 'Aplicando marca d\'água...', () async {
-        final r = await compute(PdfTools.watermarkImage,
-            {'pdf': await f.readAsBytes(), 'img': img, 'corner': style == 1});
-        return DocStore.saveBytes(r, '${docName(f)} (marca)');
-      });
-      if (out == null || !c.mounted) return;
-      open(c, out);
-      return;
+      final text = await askText(c, 'Texto da marca d\'água',
+          initial: prefs.getString('wm_text') ?? '',
+          hint: 'Ex.: CONFIDENCIAL ou seu nome');
+      if (text == null || text.trim().isEmpty || !c.mounted) return;
+      await prefs.setString('wm_text', text.trim());
+      png = await textPng(text.trim());
     }
-
-    // ---- marca com texto (lembra o último texto usado) ----
-    final prefs = await SharedPreferences.getInstance();
     if (!c.mounted) return;
-    final text = await askText(c, 'Texto da marca d\'água',
-        initial: prefs.getString('wm_text') ?? '',
-        hint: 'Ex.: CONFIDENCIAL ou seu nome');
-    if (text == null || text.isEmpty || !c.mounted) return;
-    await prefs.setString('wm_text', text);
-    if (!c.mounted) return;
-    final style = await choose(c, 'Estilo', ['Diagonal grande', 'Pequena no canto']);
+    final style = await choose(c, 'Estilo', [
+      kind == 1 ? 'Grande e transparente no centro' : 'Diagonal grande',
+      'Pequena no canto',
+    ]);
     if (style == null || !c.mounted) return;
-    final out = await Busy.run<File>(c, 'Aplicando marca d\'água...', () async {
-      final r = await compute(PdfTools.watermark,
-          {'pdf': await f.readAsBytes(), 'text': text, 'corner': style == 1});
-      return DocStore.saveBytes(r, '${docName(f)} (marca)');
+    final corner = style == 1;
+    await _placeAndApply(c, f, png,
+        title: 'Posicionar marca d\'água',
+        busy: 'Aplicando marca d\'água...',
+        suffix: 'marca',
+        x: corner ? 0.82 : 0.5,
+        y: corner ? 0.95 : 0.5,
+        w: corner ? 0.25 : (kind == 1 ? 0.7 : 0.85),
+        opacity: corner ? (kind == 1 ? 0.85 : 1.0) : (kind == 1 ? 0.22 : 0.30),
+        diagonal: !corner && kind == 0);
+  }
+
+  /// Abre a tela de posicionar (arrastar, tamanho, opacidade, páginas)
+  /// e aplica o PNG no PDF.
+  static Future<void> _placeAndApply(BuildContext c, File f, Uint8List png,
+      {required String title,
+      required String busy,
+      required String suffix,
+      double x = 0.5,
+      double y = 0.5,
+      double w = 0.3,
+      double opacity = 1.0,
+      bool diagonal = false}) async {
+    final bytes = await f.readAsBytes();
+    if (!c.mounted) return;
+    final n = await Busy.run<int>(
+        c, 'Abrindo PDF...', () => compute(PdfTools.pageCount, bytes));
+    if (n == null || !c.mounted) return;
+    final pos = await Navigator.push<Map<String, dynamic>>(
+        c,
+        MaterialPageRoute(
+            builder: (_) => PlaceScreen(
+                  title: title,
+                  pdf: bytes,
+                  overlay: png,
+                  pageCount: n,
+                  x: x,
+                  y: y,
+                  w: w,
+                  opacity: opacity,
+                  diagonal: diagonal,
+                )));
+    if (pos == null || !c.mounted) return;
+    final out = await Busy.run<File>(c, busy, () async {
+      final r = await compute(
+          PdfTools.overlay, <String, dynamic>{'pdf': bytes, 'png': png, ...pos});
+      return DocStore.saveBytes(r, '${docName(f)} ($suffix)');
     });
     if (out == null || !c.mounted) return;
     open(c, out);
@@ -732,13 +768,15 @@ class ToolActions {
     final f = await _pdf(c, file, title: 'Carimbar qual PDF?');
     if (f == null || !c.mounted) return;
     final text = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final out = await Busy.run<File>(c, 'Aplicando carimbo...', () async {
-      final r = await compute(
-          PdfTools.dateStamp, {'pdf': await f.readAsBytes(), 'text': text});
-      return DocStore.saveBytes(r, '${docName(f)} (carimbo)');
-    });
-    if (out == null || !c.mounted) return;
-    open(c, out);
+    final png = await stampPng(text);
+    if (!c.mounted) return;
+    await _placeAndApply(c, f, png,
+        title: 'Posicionar carimbo',
+        busy: 'Aplicando carimbo...',
+        suffix: 'carimbo',
+        x: 0.80,
+        y: 0.95,
+        w: 0.32);
   }
 
   // ------------------------------------------------------------------
