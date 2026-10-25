@@ -22,6 +22,7 @@ import '../services/pdf_tools.dart';
 import 'common.dart';
 import 'doc_picker.dart';
 import 'editor_screen.dart';
+import 'id_reader.dart';
 import 'page_manager.dart';
 import 'signature_screen.dart';
 import 'text_screen.dart';
@@ -278,15 +279,44 @@ class ToolActions {
     final size = await choose(c, 'Tamanho no PDF', [
       'Tamanho real do cartão (para imprimir como cópia)',
       'Grande (fácil de ler na tela)',
+      'Várias cópias na mesma folha (tamanho real)',
     ]);
     if (size == null || !c.mounted) return;
+    var copies = 1;
+    if (size == 2) {
+      final n = await choose(c, 'Quantas cópias na folha?',
+          ['2 cópias', '3 cópias', '4 cópias']);
+      if (n == null || !c.mounted) return;
+      copies = n + 2;
+    }
+
+    // Marca d'água (lembra o último texto usado).
+    final prefs = await SharedPreferences.getInstance();
+    if (!c.mounted) return;
+    final wm = await choose(c, 'Marca d\'água na cópia?', [
+      'Sem marca d\'água',
+      'Adicionar marca d\'água (evita uso indevido)',
+    ]);
+    if (wm == null || !c.mounted) return;
+    String? wmText;
+    if (wm == 1) {
+      wmText = await askText(c, 'Texto da marca d\'água',
+          initial: prefs.getString('id_wm_text') ??
+              'CÓPIA - ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
+          hint: 'Ex.: Cópia para abertura de conta no banco X');
+      if (wmText == null || !c.mounted) return;
+      wmText = wmText.trim();
+      if (wmText.isEmpty) wmText = null;
+      if (wmText != null) await prefs.setString('id_wm_text', wmText);
+      if (!c.mounted) return;
+    }
+
     final name = await askText(c, 'Nome do documento',
         initial: 'Documento de identidade');
     if (name == null || name.isEmpty || !c.mounted) return;
 
     final f = await Busy.run<File>(c, 'Criando PDF...', () async {
-      // Caixa onde cada lado cabe sem estourar a página A4.
-      final real = size == 0;
+      final real = size != 1;
       final boxW = real ? 85.6 * PdfPageFormat.mm : 360.0;
       final boxH = real ? 54.0 * PdfPageFormat.mm : 250.0;
       pw.Widget card(Uint8List b) {
@@ -306,25 +336,103 @@ class ToolActions {
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(36),
-        build: (_) => pw.Column(
-          mainAxisAlignment: real
-              ? pw.MainAxisAlignment.start
-              : pw.MainAxisAlignment.spaceEvenly,
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            if (real) pw.SizedBox(height: 40),
-            card(front),
-            if (back != null) ...[
-              pw.SizedBox(height: real ? 40 : 20),
-              card(back!),
+        build: (_) {
+          if (copies > 1) {
+            // Cada linha: frente e verso lado a lado (linha de corte entre elas).
+            pw.Widget row() => pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    card(front),
+                    if (back != null) ...[
+                      pw.SizedBox(width: 16),
+                      card(back!),
+                    ],
+                  ],
+                );
+            // Se não couber (cartão em pé), reduz tudo um pouco.
+            return pw.Center(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.scaleDown,
+                child: pw.Column(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < copies; i++) ...[
+                      if (i > 0)
+                        pw.Container(
+                          width: 500,
+                          margin: const pw.EdgeInsets.symmetric(vertical: 14),
+                          decoration: const pw.BoxDecoration(
+                            border: pw.Border(
+                              bottom: pw.BorderSide(
+                                  color: PdfColors.grey400,
+                                  width: 0.5,
+                                  style: pw.BorderStyle.dashed),
+                            ),
+                          ),
+                        ),
+                      row(),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }
+          return pw.Column(
+            mainAxisAlignment: real
+                ? pw.MainAxisAlignment.start
+                : pw.MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              if (real) pw.SizedBox(height: 40),
+              card(front),
+              if (back != null) ...[
+                pw.SizedBox(height: real ? 40 : 20),
+                card(back!),
+              ],
             ],
-          ],
-        ),
+          );
+        },
       ));
-      return DocStore.saveBytes(await doc.save(), name);
+      var bytes = await doc.save();
+      if (wmText != null) {
+        bytes = await compute(PdfTools.watermark,
+            {'pdf': bytes, 'text': wmText, 'corner': false});
+      }
+      return DocStore.saveBytes(bytes, name);
     });
     if (f == null || !c.mounted) return;
-    open(c, f);
+
+    final next = await choose(c, 'PDF do cartão salvo',
+        ['Abrir o PDF', 'Ler os dados do documento']);
+    if (!c.mounted) return;
+    if (next == 1) {
+      await _readIdData(c, [front, if (back != null) back!]);
+    } else {
+      open(c, f);
+    }
+  }
+
+  /// Faz OCR dos lados do cartão e mostra os dados (MRZ, CPF, nome, datas...).
+  static Future<void> _readIdData(BuildContext c, List<Uint8List> sides) async {
+    final text = await Busy.run<String>(c, 'Lendo os dados...', () async {
+      final dir = await Directory.systemTemp.createTemp('idcard');
+      final buf = StringBuffer();
+      try {
+        for (var i = 0; i < sides.length; i++) {
+          final f = File('${dir.path}/lado$i.jpg');
+          await f.writeAsBytes(sides[i]);
+          buf.writeln(await _ocrFile(f.path));
+        }
+      } finally {
+        await dir.delete(recursive: true);
+      }
+      return IdReader.report(buf.toString());
+    });
+    if (text == null || !c.mounted) return;
+    Navigator.push(
+        c,
+        MaterialPageRoute(
+            builder: (_) => TextScreen(title: 'Dados do documento', text: text)));
   }
 
   static Future<void> importImages(BuildContext c) async {
