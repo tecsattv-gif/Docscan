@@ -62,15 +62,80 @@ class DocStore {
     return f;
   }
 
-  static Future<File> saveImagesAsPdf(List<Uint8List> images, String name) async {
+  // ---- tamanhos de página ----
+  /// Nomes mostrados ao usuário (mesma ordem de [_pageSizes]).
+  static const pageSizeNames = [
+    'A4 (21 × 29,7 cm)',
+    'Carta (21,6 × 27,9 cm)',
+    'Ofício (21,6 × 33 cm)',
+    'Legal (21,6 × 35,6 cm)',
+    'A5 (14,8 × 21 cm)',
+    'A3 (29,7 × 42 cm)',
+    'Tamanho da foto (sem bordas)',
+  ];
+
+  /// null = página do tamanho exato da imagem.
+  static final List<PdfPageFormat?> _pageSizes = [
+    PdfPageFormat.a4,
+    PdfPageFormat.letter,
+    const PdfPageFormat(21.6 * PdfPageFormat.cm, 33 * PdfPageFormat.cm),
+    PdfPageFormat.legal,
+    PdfPageFormat.a5,
+    PdfPageFormat.a3,
+    null,
+  ];
+
+  static Future<int> lastPageSize() async {
+    final p = await SharedPreferences.getInstance();
+    final i = p.getInt('page_size') ?? 0;
+    return (i >= 0 && i < pageSizeNames.length) ? i : 0;
+  }
+
+  static Future<void> setPageSize(int i) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('page_size', i);
+  }
+
+  static const orientationNames = ['Automático (conforme a foto)', 'Retrato', 'Paisagem'];
+
+  static Future<int> lastOrientation() async {
+    final p = await SharedPreferences.getInstance();
+    final i = p.getInt('page_orient') ?? 0;
+    return (i >= 0 && i < orientationNames.length) ? i : 0;
+  }
+
+  static Future<void> setOrientation(int i) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('page_orient', i);
+  }
+
+  /// orientation: 0 = automático, 1 = retrato, 2 = paisagem.
+  static Future<File> saveImagesAsPdf(List<Uint8List> images, String name,
+      {int pageSize = 0, int orientation = 0, bool margin = false}) async {
     final pdf = pw.Document();
+    final base = _pageSizes[pageSize.clamp(0, _pageSizes.length - 1)];
     for (final b in images) {
       final im = pw.MemoryImage(b);
-      final land = (im.width ?? 1) > (im.height ?? 1);
+      final iw = (im.width ?? 1).toDouble();
+      final ih = (im.height ?? 1).toDouble();
+      final land = orientation == 0 ? iw > ih : orientation == 2;
+      PdfPageFormat fmt;
+      if (base == null) {
+        // página com a proporção da foto, lado maior = 29,7 cm
+        const big = 29.7 * PdfPageFormat.cm;
+        fmt = iw > ih
+            ? PdfPageFormat(big, big * ih / iw)
+            : PdfPageFormat(big * iw / ih, big);
+      } else {
+        fmt = land ? base.landscape : base.portrait;
+      }
+      final m = (margin && base != null) ? 1.0 * PdfPageFormat.cm : 0.0;
       pdf.addPage(pw.Page(
-        pageFormat: land ? PdfPageFormat.a4.landscape : PdfPageFormat.a4,
-        margin: pw.EdgeInsets.zero,
-        build: (_) => pw.Center(child: pw.Image(im, fit: pw.BoxFit.contain)),
+        pageFormat: fmt,
+        margin: pw.EdgeInsets.all(m),
+        build: (_) => pw.Center(
+            child: pw.Image(im,
+                fit: base == null ? pw.BoxFit.fill : pw.BoxFit.contain)),
       ));
     }
     return saveBytes(await pdf.save(), name);

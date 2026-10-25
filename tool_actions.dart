@@ -77,8 +77,35 @@ class ToolActions {
     final name = await askText(c, 'Nome do documento',
         initial: 'Scan ${DateFormat('dd-MM-yyyy HH-mm').format(DateTime.now())}');
     if (name == null || name.isEmpty || !c.mounted) return;
-    final f = await Busy.run<File>(
-        c, 'Criando PDF...', () => DocStore.saveImagesAsPdf(pages, name));
+    final last = await DocStore.lastPageSize();
+    if (!c.mounted) return;
+    final opts = [
+      for (var i = 0; i < DocStore.pageSizeNames.length; i++)
+        i == last ? '${DocStore.pageSizeNames[i]}  ✓' : DocStore.pageSizeNames[i]
+    ];
+    final size = await choose(c, 'Tamanho da página', opts);
+    if (size == null || !c.mounted) return;
+    await DocStore.setPageSize(size);
+    if (!c.mounted) return;
+    var orient = 0;
+    // "Tamanho da foto" já segue a forma da imagem; não precisa perguntar.
+    if (size != DocStore.pageSizeNames.length - 1) {
+      final lastO = await DocStore.lastOrientation();
+      if (!c.mounted) return;
+      final o = await choose(c, 'Orientação da página', [
+        for (var i = 0; i < DocStore.orientationNames.length; i++)
+          i == lastO
+              ? '${DocStore.orientationNames[i]}  ✓'
+              : DocStore.orientationNames[i]
+      ]);
+      if (o == null || !c.mounted) return;
+      orient = o;
+      await DocStore.setOrientation(o);
+      if (!c.mounted) return;
+    }
+    final f = await Busy.run<File>(c, 'Criando PDF...',
+        () => DocStore.saveImagesAsPdf(pages, name,
+            pageSize: size, orientation: orient));
     if (f == null || !c.mounted) return;
     open(c, f);
   }
