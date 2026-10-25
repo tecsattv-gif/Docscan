@@ -24,9 +24,23 @@ class TextScreen extends StatelessWidget {
     final name = await askText(c, 'Nome do PDF', initial: 'Texto extraído');
     if (name == null || name.isEmpty || !c.mounted) return;
     final f = await Busy.run<File>(c, 'Gerando PDF...', () async {
-      final doc = pw.Document();
+      // Fonte completa (acentos, ✓, ⚠); se faltar, usa a padrão do PDF.
+      pw.ThemeData? theme;
+      try {
+        theme = pw.ThemeData.withFont(
+          base: pw.Font.ttf(await rootBundle.load('assets/fonts/DejaVuSans.ttf')),
+          bold: pw.Font.ttf(await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf')),
+        );
+      } catch (_) {}
+      final doc = pw.Document(theme: theme);
+      // Uma linha por widget: o texto pode quebrar em várias páginas.
       doc.addPage(pw.MultiPage(
-        build: (_) => [pw.Text(text, style: const pw.TextStyle(fontSize: 12))],
+        build: (_) => [
+          for (final line in text.split('\n'))
+            line.trim().isEmpty
+                ? pw.SizedBox(height: 8)
+                : pw.Text(line, style: const pw.TextStyle(fontSize: 12)),
+        ],
       ));
       return DocStore.saveBytes(await doc.save(), name);
     });
