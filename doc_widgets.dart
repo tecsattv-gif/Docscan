@@ -44,7 +44,7 @@ class DocTile extends StatelessWidget {
           style: const TextStyle(fontSize: 12)),
       trailing: selecting
           ? Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: selected ? kTeal : Colors.white54)
+              color: selected ? kTeal : context.muted)
           : IconButton(icon: const Icon(Icons.more_vert), onPressed: onMore),
       onTap: onTap,
       onLongPress: onLongPress,
@@ -76,7 +76,7 @@ class DocCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: Container(
         decoration: BoxDecoration(
-          color: selected ? kTeal.withOpacity(0.2) : kCard,
+          color: selected ? kTeal.withOpacity(0.2) : context.card,
           borderRadius: BorderRadius.circular(10),
           border: selected ? Border.all(color: kTeal, width: 2) : null,
         ),
@@ -98,7 +98,7 @@ class DocCard extends StatelessWidget {
           Text(docName(file),
               maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
           Text(fmtSize(file.lengthSync()),
-              style: const TextStyle(fontSize: 11, color: Colors.white54)),
+              style: TextStyle(fontSize: 11, color: context.muted)),
         ]),
       ),
     );

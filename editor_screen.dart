@@ -188,7 +188,10 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // O editor de imagem fica sempre escuro, como em apps de câmera.
+    return Theme(
+      data: appTheme(Brightness.dark),
+      child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: kBg,
@@ -236,6 +239,7 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
         ),
       ]),
+      ),
     );
   }
 

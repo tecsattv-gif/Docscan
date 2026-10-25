@@ -59,8 +59,8 @@ class _SignatureScreenState extends State<SignatureScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
-          const Text('Assine com o dedo na área branca',
-              style: TextStyle(color: Colors.white70)),
+          Text('Assine com o dedo na área branca',
+              style: TextStyle(color: context.muted)),
           const SizedBox(height: 12),
           Expanded(
             child: ClipRRect(
@@ -217,7 +217,7 @@ class _SignPlaceScreenState extends State<SignPlaceScreen> {
                 ),
         ),
         Container(
-          color: kBg,
+          color: context.bar,
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           child: SafeArea(
             top: false,
@@ -254,8 +254,8 @@ class _SignPlaceScreenState extends State<SignPlaceScreen> {
                   icon: const Icon(Icons.chevron_right),
                 ),
               ]),
-              const Text('Arraste a assinatura para o lugar certo',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text('Arraste a assinatura para o lugar certo',
+                  style: TextStyle(color: context.muted, fontSize: 12)),
             ]),
           ),
         ),

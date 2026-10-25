@@ -94,7 +94,7 @@ class _DocsTabState extends State<DocsTab> {
     return Column(children: [
       if (selecting)
         Container(
-          color: kCard,
+          color: context.card,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(children: [
             IconButton(icon: const Icon(Icons.close), onPressed: () => setState(_sel.clear)),
@@ -131,7 +131,7 @@ class _DocsTabState extends State<DocsTab> {
                   hintText: 'Pesquisar',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: kCard,
+                  fillColor: context.card,
                   contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
@@ -167,7 +167,7 @@ class _DocsTabState extends State<DocsTab> {
                     _files.isEmpty
                         ? 'Nenhum documento ainda'
                         : 'Nada encontrado',
-                    style: const TextStyle(color: Colors.white60)),
+                    style: TextStyle(color: context.muted)),
               )
             : _grid
                 ? GridView.builder(

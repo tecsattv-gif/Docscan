@@ -1,10 +1,61 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/doc_store.dart';
 
 const kTeal = Color(0xFF19B394);
 const kBg = Color(0xFF232326);
 const kCard = Color(0xFF323236);
+
+// ---- Tema claro / escuro ----
+/// Tema escolhido pelo usuário (Automático, Claro ou Escuro).
+final themeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
+const themeNames = ['Automático (igual ao celular)', 'Claro', 'Escuro'];
+const _themeModes = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
+
+Future<void> loadTheme() async {
+  final p = await SharedPreferences.getInstance();
+  final i = p.getInt('theme_mode') ?? 2; // padrão: escuro (como antes)
+  themeMode.value = _themeModes[i.clamp(0, 2)];
+}
+
+Future<void> setTheme(int i) async {
+  themeMode.value = _themeModes[i];
+  final p = await SharedPreferences.getInstance();
+  await p.setInt('theme_mode', i);
+}
+
+int get themeIndex => _themeModes.indexOf(themeMode.value);
+
+ThemeData appTheme(Brightness b) {
+  final dark = b == Brightness.dark;
+  final bg = dark ? kBg : const Color(0xFFF6F7F8);
+  return ThemeData(
+    brightness: b,
+    colorSchemeSeed: kTeal,
+    scaffoldBackgroundColor: bg,
+    useMaterial3: true,
+    appBarTheme: AppBarTheme(
+      backgroundColor: bg,
+      surfaceTintColor: Colors.transparent,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: dark ? const Color(0xFF1C1C1E) : Colors.white,
+      indicatorColor: kTeal.withOpacity(0.25),
+    ),
+  );
+}
+
+/// Cores que mudam com o tema.
+extension AppColors on BuildContext {
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  /// Fundo de cartões, botões e caixa de pesquisa.
+  Color get card => isDark ? kCard : const Color(0xFFE9ECEE);
+  /// Fundo das barras de baixo.
+  Color get bar => isDark ? kBg : Colors.white;
+  /// Texto secundário (cinza).
+  Color get muted => isDark ? Colors.white60 : Colors.black54;
+}
 
 void toast(BuildContext c, String m, {String? action, VoidCallback? onAction}) {
   if (!c.mounted) return;

@@ -67,11 +67,11 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
       body: _loading && _thumbs.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : Column(children: [
-              const Padding(
-                padding: EdgeInsets.all(10),
+              Padding(
+                padding: const EdgeInsets.all(10),
                 child: Text(
                     'Segure uma página e arraste para mudar a ordem. Marque para extrair.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    style: TextStyle(color: context.muted, fontSize: 13)),
               ),
               Expanded(
                 child: ReorderableListView.builder(
@@ -118,7 +118,7 @@ class _PageManagerScreenState extends State<PageManagerScreen> {
                 ),
               ),
               Container(
-                color: kBg,
+                color: context.bar,
                 padding: const EdgeInsets.all(12),
                 child: SafeArea(
                   top: false,

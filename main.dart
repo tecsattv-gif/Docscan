@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'screens/common.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await loadTheme();
   // Em vez da tela cinza, mostra o erro real na tela (para descobrir a causa).
   ErrorWidget.builder = (details) => Directionality(
         textDirection: TextDirection.ltr,
@@ -28,23 +31,22 @@ class DocScanApp extends StatelessWidget {
   const DocScanApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'DocScan',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          colorSchemeSeed: kTeal,
-          scaffoldBackgroundColor: kBg,
-          useMaterial3: true,
-          appBarTheme: const AppBarTheme(
-            backgroundColor: kBg,
-            surfaceTintColor: Colors.transparent,
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeMode,
+        builder: (_, mode, __) => MaterialApp(
+          title: 'DocScan',
+          debugShowCheckedModeBanner: false,
+          theme: appTheme(Brightness.light),
+          darkTheme: appTheme(Brightness.dark),
+          themeMode: mode,
+          // Ícones da barra de status escuros no tema claro e claros no escuro.
+          builder: (ctx, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+            value: Theme.of(ctx).brightness == Brightness.dark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: child!,
           ),
-          navigationBarTheme: NavigationBarThemeData(
-            backgroundColor: const Color(0xFF1C1C1E),
-            indicatorColor: kTeal.withOpacity(0.25),
-          ),
+          home: const SplashScreen(),
         ),
-        home: const SplashScreen(),
       );
 }

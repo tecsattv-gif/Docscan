@@ -51,11 +51,12 @@ class _MeTabState extends State<MeTab> {
             child: Image.asset('assets/logo.png', width: 64, height: 64),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('DocScan', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('DocScan',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               Text('Digitalize. Organize. Compartilhe.',
-                  style: TextStyle(color: Colors.white60)),
+                  style: TextStyle(color: context.muted)),
             ]),
           ),
         ]),
@@ -66,6 +67,17 @@ class _MeTabState extends State<MeTab> {
         subtitle: Text('$_count arquivo(s)  ·  ${fmtSize(_size)}'),
       ),
       const Divider(),
+      ListTile(
+        leading: const Icon(Icons.brightness_6_outlined),
+        title: const Text('Tema'),
+        subtitle: Text(themeNames[themeIndex]),
+        onTap: () async {
+          final i = await choose(context, 'Tema', themeNames);
+          if (i == null) return;
+          await setTheme(i);
+          if (mounted) setState(() {});
+        },
+      ),
       SwitchListTile(
         secondary: const Icon(Icons.auto_fix_high),
         title: const Text('Scanner automático'),

@@ -76,11 +76,11 @@ class _HomeTabState extends State<HomeTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                  color: kCard, borderRadius: BorderRadius.circular(24)),
-              child: const Row(children: [
-                Icon(Icons.search, color: Colors.white54),
-                SizedBox(width: 10),
-                Text('Pesquisar documentos', style: TextStyle(color: Colors.white54)),
+                  color: context.card, borderRadius: BorderRadius.circular(24)),
+              child: Row(children: [
+                Icon(Icons.search, color: context.muted),
+                const SizedBox(width: 10),
+                Text('Pesquisar documentos', style: TextStyle(color: context.muted)),
               ]),
             ),
           ),
@@ -105,13 +105,13 @@ class _HomeTabState extends State<HomeTab> {
           ]),
         ),
         if (recents.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(32),
+          Padding(
+            padding: const EdgeInsets.all(32),
             child: Center(
               child: Text(
                   'Nenhum documento ainda.\nToque em Digitalizar para começar.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white60)),
+                  style: TextStyle(color: context.muted)),
             ),
           ),
         for (final f in recents)
