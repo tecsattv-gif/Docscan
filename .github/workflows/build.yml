@@ -13,7 +13,7 @@ jobs:
 
       - name: Organizar arquivos
         run: |
-          mkdir -p lib/screens lib/services assets
+          mkdir -p lib/screens lib/services assets/fonts
           for f in *.dart; do
             [ -e "$f" ] || continue
             case "$f" in
@@ -23,6 +23,17 @@ jobs:
             esac
           done
           [ -f logo_docscan.png ] && mv logo_docscan.png assets/logo.png || true
+
+      - name: Fonte completa para o Criar PDF
+        continue-on-error: true
+        run: |
+          mkdir -p assets/fonts
+          D=/usr/share/fonts/truetype/dejavu
+          if [ ! -f $D/DejaVuSans.ttf ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core
+          fi
+          cp $D/DejaVuSans.ttf $D/DejaVuSans-Bold.ttf assets/fonts/
+          ls -l assets/fonts
 
       - uses: actions/setup-java@v4
         with:
