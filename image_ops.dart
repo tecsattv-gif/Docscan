@@ -152,7 +152,8 @@ class ImageOps {
     } else if (mode == 'flatten') {
       final clean = img.gaussianBlur(im, radius: 1);
       _flatten(clean);
-      _despeckle(clean);
+      // só pontinhos bem isolados: letras finas impressas ficam
+      _despeckle(clean, maxNb: 2);
       return Uint8List.fromList(img.encodeJpg(clean, quality: 90));
     } else {
       // tira o granulado do sensor antes de clarear o papel
@@ -390,7 +391,7 @@ class ImageOps {
 
   /// Apaga pontinhos escuros isolados (ruído) que sobram no papel branco.
   /// Um pixel escuro com poucos vizinhos escuros numa janela 5x5 não é texto.
-  static void _despeckle(img.Image im) {
+  static void _despeckle(img.Image im, {int maxNb = 5}) {
     final w = im.width, h = im.height;
     final dark = Uint8List(w * h);
     for (final p in im) {
@@ -401,13 +402,13 @@ class ImageOps {
       for (var x = 2; x < w - 2; x++) {
         if (dark[y * w + x] == 0) continue;
         var nb = 0;
-        for (var dy = -2; dy <= 2 && nb <= 5; dy++) {
+        for (var dy = -2; dy <= 2 && nb <= maxNb; dy++) {
           final row = (y + dy) * w + x;
           for (var dx = -2; dx <= 2; dx++) {
             nb += dark[row + dx];
           }
         }
-        if (nb <= 5) im.setPixelRgb(x, y, 255, 255, 255);
+        if (nb <= maxNb) im.setPixelRgb(x, y, 255, 255, 255);
       }
     }
   }
