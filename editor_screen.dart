@@ -83,6 +83,22 @@ class _EditorScreenState extends State<EditorScreen> {
     setState(() => _imgSize = Size(im.width.toDouble(), im.height.toDouble()));
   }
 
+  /// Esticar a folha torta já recortada (ex.: vinda do scanner automático):
+  /// usa a imagem inteira como ponto de partida e segue as bordas do papel.
+  Future<void> _stretch() async {
+    setState(() => _busy = true);
+    try {
+      _cropped = await compute(ImageOps.warpCurved, {
+        'bytes': _cropped ?? _base,
+        'c': const [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
+      });
+      await _applyFilter();
+    } catch (e) {
+      if (mounted) toast(context, 'Erro ao esticar: $e');
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _applyCrop() async {
     setState(() => _busy = true);
     try {
@@ -331,6 +347,11 @@ class _EditorScreenState extends State<EditorScreen> {
                   }),
           icon: const Icon(Icons.crop),
           label: const Text('Refazer recorte'),
+        ),
+        TextButton.icon(
+          onPressed: _busy ? null : _stretch,
+          icon: const Icon(Icons.open_in_full),
+          label: const Text('Esticar'),
         ),
       ]),
     ]);
