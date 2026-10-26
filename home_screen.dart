@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final tabs = <Widget>[
       HomeTab(goTo: (i) => setState(() => _i = i)),
-      const DocsTab(),
+      DocsTab(active: _i == 1),
       const ToolsTab(),
       const MeTab(),
     ];

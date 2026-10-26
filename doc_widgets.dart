@@ -9,6 +9,8 @@ class DocTile extends StatelessWidget {
   final bool fav;
   final bool selected;
   final bool selecting;
+  /// Nome da pasta, mostrado nos resultados da pesquisa geral.
+  final String? folder;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onMore;
@@ -21,6 +23,7 @@ class DocTile extends StatelessWidget {
     required this.onMore,
     this.selected = false,
     this.selecting = false,
+    this.folder,
   });
 
   @override
@@ -40,7 +43,7 @@ class DocTile extends StatelessWidget {
           ),
       ]),
       subtitle: Text(
-          '${DateFormat('dd/MM/yyyy HH:mm').format(st.modified)}  ·  ${fmtSize(st.size)}',
+          '${folder != null ? '📁 $folder  ·  ' : ''}${DateFormat('dd/MM/yyyy HH:mm').format(st.modified)}  ·  ${fmtSize(st.size)}',
           style: const TextStyle(fontSize: 12)),
       trailing: selecting
           ? Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,

@@ -17,6 +17,7 @@ class DocStore {
     final base = await getApplicationDocumentsDirectory();
     final d = Directory('${base.path}/docs');
     if (!await d.exists()) await d.create(recursive: true);
+    _docsPath = d.path;
     return d;
   }
 
@@ -30,20 +31,129 @@ class DocStore {
   static String _clean(String n) =>
       n.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-').trim();
 
+  static List<File> _pdfsIn(Directory d) => d
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.toLowerCase().endsWith('.pdf'))
+      .toList();
+
+  /// Todos os documentos (do início e de dentro das pastas), mais novos primeiro.
   static Future<List<File>> list() async {
     final d = await _dir();
-    final files = d
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.toLowerCase().endsWith('.pdf'))
-        .toList();
+    final files = _pdfsIn(d);
+    for (final sub in _folderDirs(d)) {
+      files.addAll(_pdfsIn(sub));
+    }
     files.sort(
         (a, b) => b.statSync().modified.compareTo(a.statSync().modified));
     return files;
   }
 
-  static Future<File> _unique(String name) async {
+  // ---- pastas ----
+  /// Pasta onde os documentos NOVOS são salvos (a pasta aberta na aba
+  /// Documentos). null = início (sem pasta).
+  static String? saveTarget;
+  static String? _docsPath;
+
+  static List<Directory> _folderDirs(Directory d) {
+    final l = d
+        .listSync()
+        .whereType<Directory>()
+        .where((x) => !_base(x.path).startsWith('.'))
+        .toList();
+    l.sort((a, b) =>
+        _base(a.path).toLowerCase().compareTo(_base(b.path).toLowerCase()));
+    return l;
+  }
+
+  static String _base(String p) => p.split(Platform.pathSeparator).last;
+
+  /// Nomes das pastas, em ordem alfabética.
+  static Future<List<String>> folders() async =>
+      _folderDirs(await _dir()).map((d) => _base(d.path)).toList();
+
+  /// Nome da pasta do documento, ou null se está no início.
+  static String? folderOf(File f) {
+    final parent = f.parent.path;
+    if (_docsPath != null ? parent == _docsPath : _base(parent) == 'docs') {
+      return null;
+    }
+    return _base(parent);
+  }
+
+  static Future<Directory> _folderDir(String? folder) async {
     final d = await _dir();
+    if (folder == null || folder.isEmpty) return d;
+    final sub = Directory('${d.path}/$folder');
+    if (!await sub.exists()) await sub.create(recursive: true);
+    return sub;
+  }
+
+  /// Cria uma pasta e devolve o nome final (sem repetir nome existente).
+  static Future<String> createFolder(String name) async {
+    final d = await _dir();
+    var base = _clean(name);
+    if (base.isEmpty) base = 'Nova pasta';
+    var n = base;
+    var i = 2;
+    while (await Directory('${d.path}/$n').exists()) {
+      n = '$base ($i)';
+      i++;
+    }
+    await Directory('${d.path}/$n').create();
+    notify();
+    return n;
+  }
+
+  static Future<String> renameFolder(String oldName, String newName) async {
+    final d = await _dir();
+    final clean = _clean(newName);
+    if (clean.isEmpty || clean == oldName) return oldName;
+    var n = clean;
+    var i = 2;
+    while (await Directory('${d.path}/$n').exists()) {
+      n = '$clean ($i)';
+      i++;
+    }
+    await Directory('${d.path}/$oldName').rename('${d.path}/$n');
+    if (saveTarget == oldName) saveTarget = n;
+    notify();
+    return n;
+  }
+
+  /// Exclui a pasta. Com [keepDocs], os documentos voltam para o início.
+  static Future<void> deleteFolder(String name, {bool keepDocs = true}) async {
+    final d = await _dir();
+    final sub = Directory('${d.path}/$name');
+    if (!await sub.exists()) return;
+    if (keepDocs) {
+      for (final f in _pdfsIn(sub)) {
+        final t = await _unique(docNameOf(f), dir: d);
+        await f.rename(t.path);
+      }
+    }
+    await sub.delete(recursive: true);
+    if (saveTarget == name) saveTarget = null;
+    notify();
+  }
+
+  /// Move o documento para a pasta (null = início).
+  static Future<File> moveTo(File f, String? folder) async {
+    final target = await _folderDir(folder);
+    if (f.parent.path == target.path) return f;
+    final t = await _unique(docNameOf(f), dir: target);
+    final r = await f.rename(t.path);
+    notify();
+    return r;
+  }
+
+  static String docNameOf(File f) {
+    final n = _base(f.path);
+    return n.toLowerCase().endsWith('.pdf') ? n.substring(0, n.length - 4) : n;
+  }
+
+  static Future<File> _unique(String name, {Directory? dir}) async {
+    final d = dir ?? await _folderDir(saveTarget);
     var base = _clean(name);
     if (base.isEmpty) base = 'Documento';
     var f = File('${d.path}/$base.pdf');
@@ -173,7 +283,9 @@ class DocStore {
   }
 
   static Future<File> rename(File f, String newName) async {
-    final target = await _unique(newName);
+    if (_clean(newName) == docNameOf(f)) return f;
+    // continua na mesma pasta
+    final target = await _unique(newName, dir: f.parent);
     final r = await f.rename(target.path);
     notify();
     return r;

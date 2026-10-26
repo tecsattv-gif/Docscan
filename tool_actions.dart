@@ -1039,6 +1039,38 @@ class ToolActions {
   }
 
   /// Menu de um documento da biblioteca.
+  /// Escolhe uma pasta e move os documentos para ela.
+  static Future<void> moveToFolder(BuildContext c, List<File> files) async {
+    if (files.isEmpty) return;
+    final names = await DocStore.folders();
+    if (!c.mounted) return;
+    final current = files.length == 1 ? DocStore.folderOf(files.first) : '';
+    final opts = <String>[
+      '＋ Nova pasta',
+      current == null ? 'Início (sem pasta)  ✓' : 'Início (sem pasta)',
+      for (final n in names) n == current ? '📁 $n  ✓' : '📁 $n',
+    ];
+    final i = await choose(c,
+        files.length == 1 ? 'Mover "${docName(files.first)}" para' : 'Mover ${files.length} documentos para',
+        opts);
+    if (i == null || !c.mounted) return;
+    String? target;
+    if (i == 0) {
+      final n = await askText(c, 'Nome da nova pasta', hint: 'ex: Trabalho');
+      if (n == null || n.trim().isEmpty || !c.mounted) return;
+      target = await DocStore.createFolder(n);
+    } else if (i >= 2) {
+      target = names[i - 2];
+    }
+    for (final f in files) {
+      await DocStore.moveTo(f, target);
+    }
+    if (c.mounted) {
+      toast(c, '${files.length} documento(s) movido(s) para ${target ?? 'o início'}');
+    }
+  }
+
+  /// Menu de um documento da biblioteca.
   static Future<void> showDocMenu(BuildContext c, File f) async {
     final favs = await DocStore.favorites();
     if (!c.mounted) return;
@@ -1048,6 +1080,7 @@ class ToolActions {
       'Renomear',
       isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos',
       'Compartilhar',
+      'Mover para pasta',
       'Ferramentas do PDF',
       'Excluir',
     ]);
@@ -1067,13 +1100,17 @@ class ToolActions {
         await share(c, f);
         break;
       case 4:
-        await showPdfTools(c, f);
+        await moveToFolder(c, [f]);
         break;
       case 5:
+        await showPdfTools(c, f);
+        break;
+      case 6:
         if (await confirm(c, 'Excluir', 'Excluir "${docName(f)}"?', ok: 'Excluir')) {
           await DocStore.delete(f);
         }
         break;
     }
   }
+
 }
