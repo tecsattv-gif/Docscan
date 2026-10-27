@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/doc_store.dart';
 import 'common.dart';
+import 'tutorial_screen.dart';
 
 class MeTab extends StatefulWidget {
   const MeTab({super.key});
@@ -67,6 +68,13 @@ class _MeTabState extends State<MeTab> {
         subtitle: Text('$_count arquivo(s)  ·  ${fmtSize(_size)}'),
       ),
       const Divider(),
+      ListTile(
+        leading: const Icon(Icons.play_circle_outline),
+        title: const Text('Como usar'),
+        subtitle: const Text('Vídeo de 30 segundos com o passo a passo'),
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const TutorialScreen())),
+      ),
       ListTile(
         leading: const Icon(Icons.brightness_6_outlined),
         title: const Text('Tema'),
