@@ -47,6 +47,7 @@ class ToolsTab extends StatelessWidget {
         _T(Icons.lock_outline, 'Proteger com senha', () => ToolActions.protect(c)),
         _T(Icons.lock_open, 'Remover senha', () => ToolActions.unlock(c)),
         _T(Icons.print_outlined, 'Imprimir', () => ToolActions.printPdf(c)),
+        _T(Icons.save_alt, 'Salvar PDF', () => ToolActions.savePdf(c)),
       ],
     };
     return ListView(

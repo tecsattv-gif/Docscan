@@ -284,6 +284,21 @@ class DocStore {
     return r;
   }
 
+  /// Copia um PDF (por ex. aberto de outro app) para os documentos do app,
+  /// com o nome escolhido.
+  static Future<File> saveCopy(File src, String name) async {
+    final f = await _unique(name);
+    final r = await src.copy(f.path);
+    notify();
+    return r;
+  }
+
+  /// O arquivo já está na biblioteca do app (início ou dentro de uma pasta)?
+  static Future<bool> isInLibrary(File f) async {
+    final d = await _dir();
+    return File(f.path).absolute.path.startsWith('${d.absolute.path}/');
+  }
+
   static Future<File> rename(File f, String newName) async {
     if (_clean(newName) == docNameOf(f)) return f;
     // continua na mesma pasta

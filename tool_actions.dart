@@ -970,6 +970,49 @@ class ToolActions {
     return sb.toString();
   }
 
+  /// Salva o PDF aberto: nos documentos do DocScan ou numa pasta do celular.
+  static Future<void> savePdf(BuildContext c, {File? file}) async {
+    final f = await _pdf(c, file, title: 'Salvar qual PDF?');
+    if (f == null || !c.mounted) return;
+    final where = await choose(c, 'Salvar PDF', [
+      'Nos meus documentos (DocScan)',
+      'No celular (escolher pasta)',
+    ]);
+    if (where == null || !c.mounted) return;
+
+    // PDFs vindos de outros apps costumam ter nome de código (ex. 6361b06...).
+    var suggested = docName(f);
+    if (RegExp(r'^[0-9a-fA-F-]{12,}$').hasMatch(suggested)) {
+      suggested = 'Documento ${DateFormat('dd-MM-yyyy HH-mm').format(DateTime.now())}';
+    }
+
+    if (where == 0) {
+      if (await DocStore.isInLibrary(f)) {
+        if (c.mounted) toast(c, 'Este PDF já está nos seus documentos');
+        return;
+      }
+      if (!c.mounted) return;
+      final name = await askText(c, 'Nome do documento', initial: suggested);
+      if (name == null || name.trim().isEmpty || !c.mounted) return;
+      final saved = await DocStore.saveCopy(f, name.trim());
+      if (c.mounted) _saved(c, saved, 'PDF salvo nos seus documentos');
+      return;
+    }
+
+    try {
+      final out = await FilePicker.platform.saveFile(
+        dialogTitle: 'Salvar PDF',
+        fileName: '$suggested.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        bytes: await f.readAsBytes(),
+      );
+      if (out != null && c.mounted) toast(c, 'PDF salvo no celular');
+    } catch (_) {
+      if (c.mounted) toast(c, 'Não foi possível salvar nessa pasta. Tente outra.');
+    }
+  }
+
   static Future<void> toWord(BuildContext c, {File? file}) async {
     final f = await _pdf(c, file, title: 'Converter qual PDF?');
     if (f == null || !c.mounted) return;
@@ -992,6 +1035,7 @@ class ToolActions {
   static Future<void> showPdfTools(BuildContext c, File f,
       {bool fromViewer = false}) async {
     final items = <MapEntry<String, Future<void> Function()>>[
+      MapEntry('Salvar PDF', () => savePdf(c, file: f)),
       MapEntry('Adicionar páginas',
           () => addPages(c, file: f, fromViewer: fromViewer)),
       MapEntry('Organizar / girar páginas', () => organize(c, file: f)),
