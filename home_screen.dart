@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'common.dart';
 import 'tab_docs.dart';
 import 'tab_home.dart';
 import 'tab_me.dart';
 import 'tab_tools.dart';
 import 'tool_actions.dart';
+import 'tutorial_screen.dart';
 
 /// Estrutura principal com as 4 abas (Início, Documentos, Ferramentas, Eu).
 class HomeScreen extends StatefulWidget {
@@ -30,11 +32,24 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      String? p;
       try {
-        final p = await _open.invokeMethod<String>('initialFile');
+        p = await _open.invokeMethod<String>('initialFile');
         if (p != null) _show(p);
       } catch (_) {}
+      // Primeira vez no app: mostra o vídeo "Como usar" uma única vez
+      // (não aparece se o app foi aberto para ver um PDF de fora).
+      if (p == null) await _firstRunTutorial();
     });
+  }
+
+  Future<void> _firstRunTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('tutorial_visto') ?? false) return;
+    await prefs.setBool('tutorial_visto', true);
+    if (!mounted) return;
+    Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const TutorialScreen()));
   }
 
   void _show(String path) {
