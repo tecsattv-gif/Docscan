@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -381,5 +383,116 @@ class DocStore {
     final d = Directory('${t.path}/export');
     if (!await d.exists()) await d.create(recursive: true);
     return d;
+  }
+}
+
+
+/// Backup e restauração: junta todos os PDFs (com as pastas) e os favoritos
+/// num único .zip, e depois traz tudo de volta.
+class DocBackup {
+  static const _info = 'docscan_backup.json';
+
+  /// Cria o arquivo .zip numa pasta temporária e devolve o arquivo.
+  static Future<File> create() async {
+    final d = await DocStore._dir();
+    final archive = Archive();
+    var count = 0;
+    void addAll(Directory dir, String prefix) {
+      for (final f in DocStore._pdfsIn(dir)) {
+        final bytes = f.readAsBytesSync();
+        archive.addFile(ArchiveFile(
+            'docs/$prefix${DocStore._base(f.path)}', bytes.length, bytes));
+        count++;
+      }
+    }
+
+    addAll(d, '');
+    for (final sub in DocStore._folderDirs(d)) {
+      addAll(sub, '${DocStore._base(sub.path)}/');
+    }
+    final favs = (await DocStore.favorites()).toList();
+    final info = utf8.encode(jsonEncode({
+      'app': 'DocScan',
+      'versao': 1,
+      'data': DateTime.now().toIso8601String(),
+      'documentos': count,
+      'favoritos': favs,
+    }));
+    archive.addFile(ArchiveFile(_info, info.length, info));
+
+    final tmp = await getTemporaryDirectory();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final name = 'DocScan backup ${two(now.day)}-${two(now.month)}-${now.year}'
+        ' ${two(now.hour)}h${two(now.minute)}.zip';
+    final out = File('${tmp.path}/$name');
+    await out.writeAsBytes(ZipEncoder().encodeBytes(archive));
+    return out;
+  }
+
+  /// Quantos documentos existem (para avisar quando não há o que salvar).
+  static Future<int> count() async => (await DocStore.list()).length;
+
+  /// Restaura um backup. Documentos que já existem iguais (mesmo nome e
+  /// tamanho) são pulados; com o mesmo nome e conteúdo diferente ganham
+  /// " (2)" no nome. Devolve quantos foram restaurados, ou -1 se o arquivo
+  /// não for um backup do DocScan.
+  static Future<int> restore(String zipPath) async {
+    final Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+    } catch (_) {
+      return -1;
+    }
+    final hasInfo = archive.any((f) => f.name == _info);
+    final hasDocs = archive.any((f) => f.name.startsWith('docs/'));
+    if (!hasInfo && !hasDocs) return -1;
+
+    final d = await DocStore._dir();
+    var restored = 0;
+    for (final f in archive) {
+      if (!f.isFile) continue;
+      final parts = f.name.split('/');
+      if (parts.first != 'docs' || parts.length < 2 || parts.length > 3) continue;
+      if (parts.any((p) => p.isEmpty || p == '.' || p == '..')) continue;
+      final fileName = parts.last;
+      if (!fileName.toLowerCase().endsWith('.pdf')) continue;
+      final bytes = f.readBytes();
+      if (bytes == null) continue;
+
+      var dir = d;
+      if (parts.length == 3) {
+        final folder = DocStore._clean(parts[1]);
+        if (folder.isEmpty || folder.startsWith('.')) continue;
+        dir = Directory('${d.path}/$folder');
+        if (!await dir.exists()) await dir.create(recursive: true);
+      }
+      final target = File('${dir.path}/${DocStore._clean(fileName)}');
+      if (await target.exists()) {
+        if (await target.length() == bytes.length) continue; // já existe igual
+        final unique = await DocStore._unique(
+            fileName.substring(0, fileName.length - 4),
+            dir: dir);
+        await unique.writeAsBytes(bytes);
+      } else {
+        await target.writeAsBytes(bytes);
+      }
+      restored++;
+    }
+
+    // Junta os favoritos do backup com os atuais.
+    try {
+      final infoFile = archive.firstWhere((f) => f.name == _info);
+      final data = jsonDecode(utf8.decode(infoFile.readBytes() ?? []));
+      final favs = (data['favoritos'] as List?)?.whereType<String>() ?? [];
+      if (favs.isNotEmpty) {
+        final p = await SharedPreferences.getInstance();
+        final s = (p.getStringList('favs') ?? <String>[]).toSet()..addAll(favs);
+        await p.setStringList('favs', s.toList());
+      }
+    } catch (_) {}
+
+    DocStore.notify();
+    return restored;
   }
 }

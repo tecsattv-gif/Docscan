@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/doc_store.dart';
 import 'common.dart';
@@ -39,6 +42,59 @@ class _MeTabState extends State<MeTab> {
         _auto = p.getBool('auto_scan') ?? true;
       });
     }
+  }
+
+  Future<void> _backup() async {
+    if (await DocBackup.count() == 0) {
+      if (mounted) toast(context, 'Ainda não há documentos para salvar');
+      return;
+    }
+    if (!mounted) return;
+    final where = await choose(context, 'Onde salvar o backup?', [
+      'Google Drive, e-mail ou outro app',
+      'Salvar no celular',
+    ]);
+    if (where == null || !mounted) return;
+    final f = await Busy.run<File>(context, 'Preparando backup...', DocBackup.create);
+    if (f == null || !mounted) return;
+    final name = f.path.split(Platform.pathSeparator).last;
+    if (where == 0) {
+      await Share.shareXFiles([XFile(f.path, mimeType: 'application/zip')],
+          subject: name,
+          text: 'Backup dos documentos do DocScan. Para restaurar, abra o '
+              'DocScan > Eu > Restaurar backup e escolha este arquivo.');
+    } else {
+      try {
+        final saved = await FilePicker.platform.saveFile(
+          dialogTitle: 'Salvar backup',
+          fileName: name,
+          type: FileType.custom,
+          allowedExtensions: ['zip'],
+          bytes: await f.readAsBytes(),
+        );
+        if (saved != null && mounted) toast(context, 'Backup salvo');
+      } catch (_) {
+        if (mounted) toast(context, 'Não foi possível salvar. Tente pelo Google Drive.');
+      }
+    }
+  }
+
+  Future<void> _restore() async {
+    final r = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['zip']);
+    final path = r?.files.single.path;
+    if (path == null || !mounted) return;
+    final n = await Busy.run<int>(
+        context, 'Restaurando...', () => DocBackup.restore(path));
+    if (n == null || !mounted) return;
+    if (n < 0) {
+      toast(context, 'Este arquivo não é um backup do DocScan');
+    } else if (n == 0) {
+      toast(context, 'Tudo já estava no app; nada novo para restaurar');
+    } else {
+      toast(context, '$n documento(s) restaurado(s)');
+    }
+    _load();
   }
 
   @override
@@ -98,6 +154,20 @@ class _MeTabState extends State<MeTab> {
           setState(() => _auto = v);
         },
       ),
+      const Divider(),
+      ListTile(
+        leading: const Icon(Icons.backup_outlined),
+        title: const Text('Fazer backup'),
+        subtitle: const Text('Salva todos os documentos no Google Drive, e-mail ou no celular'),
+        onTap: _backup,
+      ),
+      ListTile(
+        leading: const Icon(Icons.settings_backup_restore),
+        title: const Text('Restaurar backup'),
+        subtitle: const Text('Traz de volta os documentos de um arquivo de backup (.zip)'),
+        onTap: _restore,
+      ),
+      const Divider(),
       ListTile(
         leading: const Icon(Icons.cleaning_services_outlined),
         title: const Text('Limpar miniaturas'),
