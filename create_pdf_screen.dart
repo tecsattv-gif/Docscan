@@ -33,6 +33,27 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
   bool _margins = true;
   int _blankPages = 1;
 
+  // Alinhamento do título: 0 = esquerda, 1 = centro, 2 = direita.
+  int _titleAlign = 0;
+
+  // Fotos: em páginas separadas ou junto ao texto, posição (grade 3x3,
+  // 0 = topo-esquerda ... 4 = centro ... 8 = base-direita) e tamanho.
+  bool _imgSeparate = true;
+  int _imgPos = 4;
+  double _imgScale = 1.0;
+
+  static const _pdfAligns = [
+    pw.Alignment.topLeft, pw.Alignment.topCenter, pw.Alignment.topRight,
+    pw.Alignment.centerLeft, pw.Alignment.center, pw.Alignment.centerRight,
+    pw.Alignment.bottomLeft, pw.Alignment.bottomCenter, pw.Alignment.bottomRight,
+  ];
+  static const _rowAligns = [
+    pw.Alignment.centerLeft, pw.Alignment.center, pw.Alignment.centerRight,
+  ];
+  static const _textAligns = [
+    pw.TextAlign.left, pw.TextAlign.center, pw.TextAlign.right,
+  ];
+
   int get _paperCount => DocStore.pageSizeNames.length - 1;
 
   @override
@@ -128,37 +149,71 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
         doc.addPage(pw.Page(pageFormat: fmt, build: (_) => pw.SizedBox()));
       }
     } else {
-      if (title.isNotEmpty || body.trim().isNotEmpty) {
+      // Área útil da página (sem as margens).
+      final usableW = fmt.width - 2 * margin;
+      final usableH = fmt.height - 2 * margin;
+      final hasText = title.isNotEmpty || body.trim().isNotEmpty;
+      final flow = !_imgSeparate && _images.isNotEmpty;
+
+      if (hasText || flow) {
         doc.addPage(pw.MultiPage(
           pageFormat: fmt,
           margin: pw.EdgeInsets.all(margin),
           build: (_) => [
             if (title.isNotEmpty)
-              pw.Padding(
+              pw.Container(
+                width: double.infinity,
+                alignment: _rowAligns[_titleAlign],
                 padding: const pw.EdgeInsets.only(bottom: 14),
                 child: pw.Text(title,
+                    textAlign: _textAligns[_titleAlign],
                     style: pw.TextStyle(
                         fontSize: _fontSize * 1.7,
                         fontWeight: pw.FontWeight.bold)),
               ),
             // Um parágrafo por linha, para o texto poder quebrar de página.
-            for (final line in body.split('\n'))
-              pw.Paragraph(
-                text: line.isEmpty ? ' ' : line,
-                margin: const pw.EdgeInsets.only(bottom: 4),
-                style: pw.TextStyle(fontSize: _fontSize, lineSpacing: 2),
-              ),
+            if (body.trim().isNotEmpty)
+              for (final line in body.split('\n'))
+                pw.Paragraph(
+                  text: line.isEmpty ? ' ' : line,
+                  margin: const pw.EdgeInsets.only(bottom: 4),
+                  style: pw.TextStyle(fontSize: _fontSize, lineSpacing: 2),
+                ),
+            // Fotos junto ao texto: alinhadas à esquerda, centro ou direita.
+            if (flow)
+              for (final b in _images)
+                pw.Container(
+                  width: double.infinity,
+                  alignment: _rowAligns[_imgPos % 3],
+                  padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                  child: pw.ConstrainedBox(
+                    constraints: pw.BoxConstraints(
+                        maxWidth: usableW * _imgScale,
+                        maxHeight: (usableH - 20) * _imgScale),
+                    child: pw.Image(pw.MemoryImage(b), fit: pw.BoxFit.contain),
+                  ),
+                ),
           ],
         ));
       }
-      for (final b in _images) {
-        final im = pw.MemoryImage(b);
-        doc.addPage(pw.Page(
-          pageFormat: fmt,
-          margin: pw.EdgeInsets.all(margin),
-          build: (_) =>
-              pw.Center(child: pw.Image(im, fit: pw.BoxFit.contain)),
-        ));
+      if (!flow) {
+        // Uma foto por página, na posição e no tamanho escolhidos.
+        final align = _pdfAligns[_imgPos];
+        for (final b in _images) {
+          final im = pw.MemoryImage(b);
+          doc.addPage(pw.Page(
+            pageFormat: fmt,
+            margin: pw.EdgeInsets.all(margin),
+            build: (_) => pw.Align(
+              alignment: align,
+              child: pw.SizedBox(
+                width: usableW * _imgScale,
+                height: usableH * _imgScale,
+                child: pw.Image(im, fit: pw.BoxFit.contain, alignment: align),
+              ),
+            ),
+          ));
+        }
       }
     }
     final name = _name.text.trim().isEmpty ? 'Documento' : _name.text.trim();
@@ -197,6 +252,35 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
             decoration: const InputDecoration(
                 labelText: 'Título (opcional)', border: OutlineInputBorder()),
           ),
+          if (_title.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              const Text('Alinhar título'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SegmentedButton<int>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                        value: 0,
+                        icon: Icon(Icons.format_align_left),
+                        tooltip: 'Esquerda'),
+                    ButtonSegment(
+                        value: 1,
+                        icon: Icon(Icons.format_align_center),
+                        tooltip: 'Centro'),
+                    ButtonSegment(
+                        value: 2,
+                        icon: Icon(Icons.format_align_right),
+                        tooltip: 'Direita'),
+                  ],
+                  selected: {_titleAlign},
+                  onSelectionChanged: (s) =>
+                      setState(() => _titleAlign = s.first),
+                ),
+              ),
+            ]),
+          ],
           const SizedBox(height: 12),
           TextField(
             controller: _body,
@@ -220,7 +304,9 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
             const SizedBox(width: 12),
             if (_images.isNotEmpty)
               Expanded(
-                child: Text('${_images.length} foto(s) — uma por página',
+                child: Text(
+                    '${_images.length} foto(s) — '
+                    '${_imgSeparate ? 'uma por página' : 'junto ao texto'}',
                     style: const TextStyle(fontSize: 13)),
               ),
           ]),
@@ -252,6 +338,71 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
                 ]),
               ),
             ),
+            const SizedBox(height: 16),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                    value: true,
+                    label: Text('Uma por página'),
+                    icon: Icon(Icons.filter_none)),
+                ButtonSegment(
+                    value: false,
+                    label: Text('Junto ao texto'),
+                    icon: Icon(Icons.wrap_text)),
+              ],
+              selected: {_imgSeparate},
+              onSelectionChanged: (s) =>
+                  setState(() => _imgSeparate = s.first),
+            ),
+            const SizedBox(height: 12),
+            Text(
+                _imgSeparate
+                    ? 'Posição da foto na página'
+                    : 'Alinhamento da foto',
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Center(
+              child: _imgSeparate
+                  ? _PositionPicker(
+                      selected: _imgPos,
+                      landscape: _landscape,
+                      onChanged: (p) => setState(() => _imgPos = p))
+                  : SegmentedButton<int>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                            value: 0,
+                            icon: Icon(Icons.align_horizontal_left),
+                            label: Text('Esquerda')),
+                        ButtonSegment(
+                            value: 1,
+                            icon: Icon(Icons.align_horizontal_center),
+                            label: Text('Centro')),
+                        ButtonSegment(
+                            value: 2,
+                            icon: Icon(Icons.align_horizontal_right),
+                            label: Text('Direita')),
+                      ],
+                      selected: {_imgPos % 3},
+                      onSelectionChanged: (s) =>
+                          setState(() => _imgPos = 3 + s.first),
+                    ),
+            ),
+            Row(children: [
+              const Text('Tamanho da foto'),
+              Expanded(
+                child: Slider(
+                  value: _imgScale,
+                  min: 0.2,
+                  max: 1.0,
+                  divisions: 16,
+                  label: '${(_imgScale * 100).round()}%',
+                  activeColor: kTeal,
+                  onChanged: (v) => setState(() => _imgScale = v),
+                ),
+              ),
+              Text('${(_imgScale * 100).round()}%'),
+            ]),
           ],
           const Divider(height: 32),
           DropdownButtonFormField<int>(
@@ -330,5 +481,73 @@ class _CreatePdfScreenState extends State<CreatePdfScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Desenho de uma folha com 9 pontos (3x3): toque onde a foto deve ficar.
+class _PositionPicker extends StatelessWidget {
+  const _PositionPicker(
+      {required this.selected, required this.landscape, required this.onChanged});
+  final int selected;
+  final bool landscape;
+  final ValueChanged<int> onChanged;
+
+  static const _names = [
+    'Topo à esquerda', 'Topo ao centro', 'Topo à direita',
+    'Meio à esquerda', 'Centro', 'Meio à direita',
+    'Base à esquerda', 'Base ao centro', 'Base à direita',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final w = landscape ? 190.0 : 140.0;
+    final h = landscape ? 140.0 : 190.0;
+    final line = Theme.of(context).colorScheme.outline;
+    return Column(children: [
+      Container(
+        width: w,
+        height: h,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: line),
+        ),
+        child: GridView.count(
+          crossAxisCount: 3,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: (w - 12) / (h - 12),
+          children: [
+            for (var i = 0; i < 9; i++)
+              Semantics(
+                button: true,
+                selected: i == selected,
+                label: _names[i],
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => onChanged(i),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      decoration: BoxDecoration(
+                        color: i == selected
+                            ? kTeal
+                            : Colors.grey.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: i == selected
+                          ? const Icon(Icons.image, color: Colors.white, size: 18)
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(_names[selected], style: const TextStyle(fontSize: 13)),
+    ]);
   }
 }
