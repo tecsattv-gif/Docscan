@@ -48,6 +48,13 @@ jobs:
       - name: Gerar pastas android/ios
         run: flutter create --platforms=android,ios --org com.example --project-name docscan .
 
+      - name: Icone do app
+        run: |
+          for d in icon/mipmap-*; do
+            cp "$d/ic_launcher.png" "android/app/src/main/res/$(basename $d)/ic_launcher.png"
+          done
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+
       - name: Forcar compileSdk 36 nos plugins
         run: |
           if [ -f android/build.gradle.kts ]; then
