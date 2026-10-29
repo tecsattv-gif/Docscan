@@ -24,7 +24,11 @@ Versão atual: **2.0.0**
 
 ### Editar imagem
 - Recorte pelos 4 cantos com correção de perspectiva
-- Filtros e rotação
+- Filtros: Original, Mágico, Desamassar, P&B, **Restaurar**, Cinza e Realçar
+- Rotação
+
+#### Filtro Restaurar
+Recupera páginas em mau estado (papel amarelado, manchas, sombras, texto desbotado). Primeiro normaliza o fundo, depois faz uma binarização adaptativa de Sauvola com bordas suaves, para as letras finas não quebrarem, e no fim remove pontinhos isolados. O código está em `image_ops.dart` (`_restore`); o valor `k` controla a força: mais alto limpa mais, mais baixo preserva texto fraco.
 
 ### Criar e importar
 - **Criar PDF**: título, texto e fotos, com tamanho e orientação da página à escolha.
