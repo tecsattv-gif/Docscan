@@ -29,6 +29,7 @@ import 'recreate_screen.dart';
 import 'signature_screen.dart';
 import 'text_screen.dart';
 import 'viewer_screen.dart';
+import 'watermark_library.dart';
 
 /// Todas as ações do app (digitalizar, converter, editar, utilitários).
 class ToolActions {
@@ -633,28 +634,11 @@ class ToolActions {
   static Future<void> watermark(BuildContext c, {File? file}) async {
     final f = await _pdf(c, file, title: 'Marca d\'água em qual PDF?');
     if (f == null || !c.mounted) return;
-    final kind = await choose(c, 'Tipo de marca d\'água',
-        ['Texto ou nome', 'Imagem (logo, foto...)']);
-    if (kind == null || !c.mounted) return;
-
-    Uint8List png;
-    if (kind == 1) {
-      final x = await _picker.pickImage(
-          source: ImageSource.gallery, imageQuality: 90, maxWidth: 1600);
-      if (x == null || !c.mounted) return;
-      png = await x.readAsBytes();
-    } else {
-      // lembra o último texto usado
-      final prefs = await SharedPreferences.getInstance();
-      if (!c.mounted) return;
-      final text = await askText(c, 'Texto da marca d\'água',
-          initial: prefs.getString('wm_text') ?? '',
-          hint: 'Ex.: CONFIDENCIAL ou seu nome');
-      if (text == null || text.trim().isEmpty || !c.mounted) return;
-      await prefs.setString('wm_text', text.trim());
-      png = await textPng(text.trim());
-    }
-    if (!c.mounted) return;
+    // Marcas d'água salvas: escolher, criar, trocar ou apagar.
+    final picked = await WatermarkLibrary.pick(c);
+    if (picked == null || !c.mounted) return;
+    final png = picked.png;
+    final kind = picked.isImage ? 1 : 0;
     final style = await choose(c, 'Estilo', [
       kind == 1 ? 'Grande e transparente no centro' : 'Diagonal grande',
       'Pequena no canto',
