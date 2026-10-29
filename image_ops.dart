@@ -813,6 +813,7 @@ class ImageOps {
   // 1) normaliza o fundo (divide pela média de uma janela grande);
   // 2) binarização adaptativa de Sauvola (limiar por região);
   // 3) remove pontinhos isolados.
+  // O limiar é suave (tons de cinza na borda) para não picotar letras finas.
 
   static Uint8List _restore(img.Image im) {
     final w = im.width, h = im.height;
@@ -835,7 +836,8 @@ class ImageOps {
     }
 
     // 2) Sauvola
-    const k = 0.2; // mais alto = mais limpo; mais baixo = preserva texto fraco
+    const k = 0.1; // mais alto = mais limpo; mais baixo = preserva texto fraco
+    const suave = 40.0; // faixa de transição: bordas suaves, letras finas não quebram
     const rDin = 128.0;
     final r = math.max(7, (math.max(w, h) / 150).round());
     final s1 = _integral(norm, w, h);
@@ -849,7 +851,10 @@ class ImageOps {
         final varr = _somaJanela(s2, w, j) / n - m * m;
         final desvio = math.sqrt(math.max(varr, 0));
         final limiar = m * (1 + k * (desvio / rDin - 1));
-        pb[y * w + x] = norm[y * w + x] > limiar ? 255 : 0;
+        final d = norm[y * w + x] - limiar;
+        pb[y * w + x] = d >= 0
+            ? 255
+            : (d <= -suave ? 0 : ((d + suave) / suave * 255).round());
       }
     }
 
@@ -858,14 +863,14 @@ class ImageOps {
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         var v = pb[y * w + x];
-        if (v == 0) {
+        if (v < 128) {
           var c = 0;
           for (var dy = -1; dy <= 1; dy++) {
             for (var dx = -1; dx <= 1; dx++) {
               if (dx == 0 && dy == 0) continue;
               final nx = x + dx, ny = y + dy;
               if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-              if (pb[ny * w + nx] == 0) c++;
+              if (pb[ny * w + nx] < 128) c++;
             }
           }
           if (c <= 1) v = 255;
