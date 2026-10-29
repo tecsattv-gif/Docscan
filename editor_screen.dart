@@ -39,6 +39,7 @@ class _EditorScreenState extends State<EditorScreen> {
     'magic': 'Mágico',
     'flatten': 'Desamassar',
     'bw': 'P&B',
+    'restore': 'Restaurar',
     'gray': 'Cinza',
     'enhance': 'Realçar',
   };

@@ -284,6 +284,7 @@ class ImageOps {
     if (mode == 'original') return bytes;
     final im = img.decodeImage(bytes);
     if (im == null) throw Exception('Imagem inválida');
+    if (mode == 'restore') return _restore(im);
     if (mode == 'gray') {
       for (final p in im) {
         final l = _cl(0.299 * p.r + 0.587 * p.g + 0.114 * p.b);
@@ -805,5 +806,106 @@ class ImageOps {
       y += i.height;
     }
     return Uint8List.fromList(img.encodeJpg(canvas, quality: 88));
+  }
+
+  // ---------------- Restaurar página em mau estado ----------------
+  // Papel amarelado, manchas, sombras e texto desbotado:
+  // 1) normaliza o fundo (divide pela média de uma janela grande);
+  // 2) binarização adaptativa de Sauvola (limiar por região);
+  // 3) remove pontinhos isolados.
+
+  static Uint8List _restore(img.Image im) {
+    final w = im.width, h = im.height;
+    final cinza = Uint8List(w * h);
+    for (final p in im) {
+      cinza[p.y * w + p.x] = _cl(0.299 * p.r + 0.587 * p.g + 0.114 * p.b);
+    }
+
+    // 1) fundo
+    final rFundo = math.max(15, (math.max(w, h) / 40).round());
+    final it = _integral(cinza, w, h);
+    final norm = Uint8List(w * h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final j = _janela(w, h, x, y, rFundo);
+        final media = _somaJanela(it, w, j) / _area(j);
+        final v = cinza[y * w + x] * 255.0 / math.max(media, 1.0);
+        norm[y * w + x] = v >= 255 ? 255 : v.round();
+      }
+    }
+
+    // 2) Sauvola
+    const k = 0.2; // mais alto = mais limpo; mais baixo = preserva texto fraco
+    const rDin = 128.0;
+    final r = math.max(7, (math.max(w, h) / 150).round());
+    final s1 = _integral(norm, w, h);
+    final s2 = _integral(norm, w, h, quadrado: true);
+    final pb = Uint8List(w * h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final j = _janela(w, h, x, y, r);
+        final n = _area(j).toDouble();
+        final m = _somaJanela(s1, w, j) / n;
+        final varr = _somaJanela(s2, w, j) / n - m * m;
+        final desvio = math.sqrt(math.max(varr, 0));
+        final limiar = m * (1 + k * (desvio / rDin - 1));
+        pb[y * w + x] = norm[y * w + x] > limiar ? 255 : 0;
+      }
+    }
+
+    // 3) pontinhos isolados
+    final out = img.Image(width: w, height: h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var v = pb[y * w + x];
+        if (v == 0) {
+          var c = 0;
+          for (var dy = -1; dy <= 1; dy++) {
+            for (var dx = -1; dx <= 1; dx++) {
+              if (dx == 0 && dy == 0) continue;
+              final nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+              if (pb[ny * w + nx] == 0) c++;
+            }
+          }
+          if (c <= 1) v = 255;
+        }
+        out.setPixelRgb(x, y, v, v, v);
+      }
+    }
+    return Uint8List.fromList(img.encodeJpg(out, quality: 90));
+  }
+
+  static Float64List _integral(Uint8List src, int w, int h,
+      {bool quadrado = false}) {
+    final ww = w + 1;
+    final it = Float64List(ww * (h + 1));
+    for (var y = 0; y < h; y++) {
+      double linha = 0;
+      for (var x = 0; x < w; x++) {
+        final v = src[y * w + x].toDouble();
+        linha += quadrado ? v * v : v;
+        it[(y + 1) * ww + x + 1] = it[y * ww + x + 1] + linha;
+      }
+    }
+    return it;
+  }
+
+  /// [x0, y0, x1, y1] da janela de raio r, limitada à imagem.
+  static List<int> _janela(int w, int h, int x, int y, int r) => [
+        math.max(0, x - r),
+        math.max(0, y - r),
+        math.min(w, x + r + 1),
+        math.min(h, y + r + 1),
+      ];
+
+  static int _area(List<int> j) => (j[2] - j[0]) * (j[3] - j[1]);
+
+  static double _somaJanela(Float64List it, int w, List<int> j) {
+    final ww = w + 1;
+    return it[j[3] * ww + j[2]] -
+        it[j[1] * ww + j[2]] -
+        it[j[3] * ww + j[0]] +
+        it[j[1] * ww + j[0]];
   }
 }
