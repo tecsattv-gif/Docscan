@@ -445,6 +445,45 @@ class DocBackup {
     return out;
   }
 
+  /// Pasta pública onde o backup fica salvo no celular.
+  static const pasta = '/storage/emulated/0/Documents/DocScan';
+  static const pastaLegivel = 'Documentos › DocScan';
+  static const nomeFixo = 'DocScan backup.zip';
+
+  /// Copia o backup para Documentos/DocScan com nome fixo, substituindo o
+  /// backup anterior (e apagando os antigos com data no nome).
+  /// Devolve o caminho gravado.
+  static Future<String> saveToFolder(File zip) async {
+    await Directory(pasta).create(recursive: true);
+    var destino = File('$pasta/$nomeFixo');
+    try {
+      if (await destino.exists()) await destino.delete();
+      await zip.copy(destino.path);
+    } catch (_) {
+      // Arquivo de uma instalação anterior (o Android não deixa apagar):
+      // grava com a data no nome.
+      final now = DateTime.now();
+      String two(int n) => n.toString().padLeft(2, '0');
+      destino = File('$pasta/DocScan backup ${now.year}-${two(now.month)}-${two(now.day)}'
+          ' ${two(now.hour)}h${two(now.minute)}.zip');
+      await zip.copy(destino.path);
+    }
+    try {
+      await for (final e in Directory(pasta).list()) {
+        final nome = e.path.split('/').last;
+        if (e is File &&
+            e.path != destino.path &&
+            nome.startsWith('DocScan backup') &&
+            nome.endsWith('.zip')) {
+          try {
+            await e.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return destino.path;
+  }
+
   /// Quantos documentos existem (para avisar quando não há o que salvar).
   static Future<int> count() async => (await DocStore.list()).length;
 

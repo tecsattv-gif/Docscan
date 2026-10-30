@@ -60,7 +60,7 @@ Recupera páginas em mau estado (papel amarelado, manchas, sombras, texto desbot
 ### Aba "Eu"
 - Tema automático, claro ou escuro
 - Liga/desliga o scanner automático
-- **Fazer backup**: gera um `.zip` com todos os documentos, que pode ir para o Google Drive, o e-mail ou uma pasta do celular.
+- **Fazer backup**: gera um `.zip` com todos os documentos. Pode ir para o Google Drive, o e-mail ou outro app, ou ser salvo no celular em **Documentos › DocScan** como `DocScan backup.zip`, **substituindo o backup anterior** (os antigos com data no nome também são apagados). Se o arquivo for de uma instalação anterior do app, o Android não deixa apagá-lo; aí o novo é salvo com a data no nome.
 - **Restaurar backup**: traz de volta os documentos de um `.zip`, sem duplicar os que já existem.
 - Limpar miniaturas para liberar espaço
 - Vídeo tutorial "Como usar" (30 segundos)

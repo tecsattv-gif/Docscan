@@ -52,7 +52,7 @@ class _MeTabState extends State<MeTab> {
     if (!mounted) return;
     final where = await choose(context, 'Onde salvar o backup?', [
       'Google Drive, e-mail ou outro app',
-      'Salvar no celular',
+      'Salvar no celular (${DocBackup.pastaLegivel}, substitui o anterior)',
     ]);
     if (where == null || !mounted) return;
     final f = await Busy.run<File>(context, 'Preparando backup...', DocBackup.create);
@@ -65,14 +65,11 @@ class _MeTabState extends State<MeTab> {
               'DocScan > Eu > Restaurar backup e escolha este arquivo.');
     } else {
       try {
-        final saved = await FilePicker.platform.saveFile(
-          dialogTitle: 'Salvar backup',
-          fileName: name,
-          type: FileType.custom,
-          allowedExtensions: ['zip'],
-          bytes: await f.readAsBytes(),
-        );
-        if (saved != null && mounted) toast(context, 'Backup salvo');
+        await DocBackup.saveToFolder(f);
+        if (mounted) {
+          toast(context,
+              'Backup salvo em ${DocBackup.pastaLegivel} (o anterior foi substituído)');
+        }
       } catch (_) {
         if (mounted) toast(context, 'Não foi possível salvar. Tente pelo Google Drive.');
       }

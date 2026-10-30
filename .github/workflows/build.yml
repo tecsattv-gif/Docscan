@@ -183,6 +183,9 @@ jobs:
         continue-on-error: true
         run: |
           sed -i 's/android:label="docscan"/android:label="DocScan"/' android/app/src/main/AndroidManifest.xml || true
+          # Android 10: permite gravar o backup em Documentos/DocScan
+          grep -q requestLegacyExternalStorage android/app/src/main/AndroidManifest.xml || \
+            sed -i 's#<application#<application android:requestLegacyExternalStorage="true"#' android/app/src/main/AndroidManifest.xml
           for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
             d="${pair%%:*}"; s="${pair##*:}"
             mkdir -p "android/app/src/main/res/mipmap-$d"
