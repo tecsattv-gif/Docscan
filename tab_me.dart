@@ -58,7 +58,10 @@ class _MeTabState extends State<MeTab> {
     final f = await Busy.run<File>(context, 'Preparando backup...', DocBackup.create);
     if (f == null || !mounted) return;
     final name = f.path.split(Platform.pathSeparator).last;
+    final conteudo = '${DocBackup.ultimoDocs} documento(s) e '
+        '${DocBackup.ultimasMarcas} marca(s) d\'água';
     if (where == 0) {
+      toast(context, 'Backup com $conteudo');
       await Share.shareXFiles([XFile(f.path, mimeType: 'application/zip')],
           subject: name,
           text: 'Backup dos documentos do DocScan. Para restaurar, abra o '
@@ -68,7 +71,7 @@ class _MeTabState extends State<MeTab> {
         await DocBackup.saveToFolder(f);
         if (mounted) {
           toast(context,
-              'Backup salvo em ${DocBackup.pastaLegivel} (o anterior foi substituído)');
+              'Backup salvo em ${DocBackup.pastaLegivel} com $conteudo (o anterior foi substituído)');
         }
       } catch (_) {
         if (mounted) toast(context, 'Não foi possível salvar. Tente pelo Google Drive.');

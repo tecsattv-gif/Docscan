@@ -408,6 +408,10 @@ class DocBackup {
   static const _info = 'docscan_backup.json';
 
   /// Cria o arquivo .zip numa pasta temporária e devolve o arquivo.
+  /// Quantos documentos e marcas d'água entraram no último backup criado.
+  static int ultimoDocs = 0;
+  static int ultimasMarcas = 0;
+
   static Future<File> create() async {
     final d = await DocStore._dir();
     final archive = Archive();
@@ -427,6 +431,8 @@ class DocBackup {
     }
     final favs = (await DocStore.favorites()).toList();
     final marcas = await _addWatermarks(archive);
+    ultimoDocs = count;
+    ultimasMarcas = marcas;
     final info = utf8.encode(jsonEncode({
       'app': 'DocScan',
       'versao': 1,
@@ -474,8 +480,9 @@ class DocBackup {
       if (m['type'] == 'image') {
         final f = File((m['file'] ?? '') as String);
         if (!f.existsSync()) continue;
-        final name = f.path.split(Platform.pathSeparator).last;
         final bytes = f.readAsBytesSync();
+        final base = f.path.split(Platform.pathSeparator).last.split('.').first;
+        final name = '$base.${_ext(bytes)}';
         archive.addFile(ArchiveFile('watermarks/$name', bytes.length, bytes));
         m['file'] = name; // no backup guarda só o nome do arquivo
       }
@@ -484,6 +491,14 @@ class DocBackup {
     final bytes = utf8.encode(jsonEncode(out));
     archive.addFile(ArchiveFile('watermarks.json', bytes.length, bytes));
     return out.length;
+  }
+
+  /// Extensão real da imagem (para o arquivo abrir como imagem no celular).
+  static String _ext(List<int> b) {
+    if (b.length > 3 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E) return 'png';
+    if (b.length > 2 && b[0] == 0xFF && b[1] == 0xD8) return 'jpg';
+    if (b.length > 11 && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42) return 'webp';
+    return 'img';
   }
 
   /// Traz de volta as marcas d'água do backup, sem duplicar as que já existem.

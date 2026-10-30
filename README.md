@@ -60,7 +60,7 @@ Recupera páginas em mau estado (papel amarelado, manchas, sombras, texto desbot
 ### Aba "Eu"
 - Tema automático, claro ou escuro
 - Liga/desliga o scanner automático
-- **Fazer backup**: gera um `.zip` com todos os documentos (com as pastas), os favoritos e as **marcas d'água salvas** (textos e imagens/logos). Pode ir para o Google Drive, o e-mail ou outro app, ou ser salvo no celular em **Documentos › DocScan** como `DocScan backup.zip`, **substituindo o backup anterior** (os antigos com data no nome também são apagados). Se o arquivo for de uma instalação anterior do app, o Android não deixa apagá-lo; aí o novo é salvo com a data no nome.
+- **Fazer backup**: gera um `.zip` com todos os documentos (com as pastas), os favoritos e as **marcas d'água salvas** (textos e imagens/logos, guardadas na pasta `watermarks/` do `.zip` com a extensão real: `.png`, `.jpg`). Ao terminar, o app mostra quantos documentos e marcas d'água entraram no backup. Pode ir para o Google Drive, o e-mail ou outro app, ou ser salvo no celular em **Documentos › DocScan** como `DocScan backup.zip`, **substituindo o backup anterior** (os antigos com data no nome também são apagados). Se o arquivo for de uma instalação anterior do app, o Android não deixa apagá-lo; aí o novo é salvo com a data no nome.
 - **Restaurar backup**: traz de volta os documentos e as marcas d'água (textos e logos) de um `.zip`, sem duplicar o que já existe.
 - Limpar miniaturas para liberar espaço
 - Vídeo tutorial "Como usar" (30 segundos)
