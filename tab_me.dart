@@ -45,7 +45,7 @@ class _MeTabState extends State<MeTab> {
   }
 
   Future<void> _backup() async {
-    if (await DocBackup.count() == 0) {
+    if (await DocBackup.count() == 0 && !await DocBackup.hasWatermarks()) {
       if (mounted) toast(context, 'Ainda não há documentos para salvar');
       return;
     }
@@ -89,7 +89,7 @@ class _MeTabState extends State<MeTab> {
     } else if (n == 0) {
       toast(context, 'Tudo já estava no app; nada novo para restaurar');
     } else {
-      toast(context, '$n documento(s) restaurado(s)');
+      toast(context, '$n item(ns) restaurado(s) (documentos e marcas d\'água)');
     }
     _load();
   }

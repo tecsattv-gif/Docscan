@@ -426,12 +426,14 @@ class DocBackup {
       addAll(sub, '${DocStore._base(sub.path)}/');
     }
     final favs = (await DocStore.favorites()).toList();
+    final marcas = await _addWatermarks(archive);
     final info = utf8.encode(jsonEncode({
       'app': 'DocScan',
       'versao': 1,
       'data': DateTime.now().toIso8601String(),
       'documentos': count,
       'favoritos': favs,
+      'marcas': marcas,
     }));
     archive.addFile(ArchiveFile(_info, info.length, info));
 
@@ -443,6 +445,90 @@ class DocBackup {
     final out = File('${tmp.path}/$name');
     await out.writeAsBytes(ZipEncoder().encodeBytes(archive));
     return out;
+  }
+
+  static const _wmKey = 'wm_library';
+
+  static Future<Directory> _wmDir() async {
+    final d = await getApplicationDocumentsDirectory();
+    final dir = Directory('${d.path}${Platform.pathSeparator}watermarks');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  /// Coloca no .zip as marcas d'água salvas (textos e imagens/logos).
+  /// Devolve quantas marcas entraram.
+  static Future<int> _addWatermarks(Archive archive) async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_wmKey);
+    if (raw == null) return 0;
+    List list;
+    try {
+      list = jsonDecode(raw) as List;
+    } catch (_) {
+      return 0;
+    }
+    final out = <Map<String, dynamic>>[];
+    for (final e in list) {
+      final m = Map<String, dynamic>.from(e as Map);
+      if (m['type'] == 'image') {
+        final f = File((m['file'] ?? '') as String);
+        if (!f.existsSync()) continue;
+        final name = f.path.split(Platform.pathSeparator).last;
+        final bytes = f.readAsBytesSync();
+        archive.addFile(ArchiveFile('watermarks/$name', bytes.length, bytes));
+        m['file'] = name; // no backup guarda só o nome do arquivo
+      }
+      out.add(m);
+    }
+    final bytes = utf8.encode(jsonEncode(out));
+    archive.addFile(ArchiveFile('watermarks.json', bytes.length, bytes));
+    return out.length;
+  }
+
+  /// Traz de volta as marcas d'água do backup, sem duplicar as que já existem.
+  static Future<int> _restoreWatermarks(Archive archive) async {
+    final idx = archive.files.where((f) => f.name == 'watermarks.json');
+    if (idx.isEmpty) return 0;
+    List list;
+    try {
+      list = jsonDecode(utf8.decode(idx.first.readBytes() ?? [])) as List;
+    } catch (_) {
+      return 0;
+    }
+    final p = await SharedPreferences.getInstance();
+    List current = [];
+    try {
+      current = jsonDecode(p.getString(_wmKey) ?? '[]') as List;
+    } catch (_) {}
+    final ids = current.map((e) => (e as Map)['id']).toSet();
+    final texts = current
+        .where((e) => (e as Map)['type'] != 'image')
+        .map((e) => (e as Map)['text'])
+        .toSet();
+    final dir = await _wmDir();
+    var added = 0;
+    for (final e in list) {
+      final m = Map<String, dynamic>.from(e as Map);
+      if (ids.contains(m['id'])) continue;
+      if (m['type'] == 'image') {
+        final name = ((m['file'] ?? '') as String).split('/').last;
+        if (name.isEmpty || name.contains('..')) continue;
+        final src = archive.files.where((f) => f.name == 'watermarks/$name');
+        if (src.isEmpty) continue;
+        final bytes = src.first.readBytes();
+        if (bytes == null) continue;
+        final target = File('${dir.path}${Platform.pathSeparator}$name');
+        await target.writeAsBytes(bytes);
+        m['file'] = target.path;
+      } else if (texts.contains(m['text'])) {
+        continue;
+      }
+      current.add(m);
+      added++;
+    }
+    await p.setString(_wmKey, jsonEncode(current));
+    return added;
   }
 
   /// Pasta pública onde o backup fica salvo no celular.
@@ -484,6 +570,12 @@ class DocBackup {
     return destino.path;
   }
 
+  /// Se há marcas d'água salvas (para permitir backup só com elas).
+  static Future<bool> hasWatermarks() async {
+    final raw = (await SharedPreferences.getInstance()).getString(_wmKey);
+    return raw != null && raw != '[]';
+  }
+
   /// Quantos documentos existem (para avisar quando não há o que salvar).
   static Future<int> count() async => (await DocStore.list()).length;
 
@@ -501,9 +593,14 @@ class DocBackup {
     final hasInfo = archive.any((f) => f.name == _info);
     final hasDocs = archive.any((f) => f.name.startsWith('docs/'));
     if (!hasInfo && !hasDocs) return -1;
+    var restored = 0;
+
+    // Marcas d'água (textos e logos) salvas.
+    try {
+      restored += await _restoreWatermarks(archive);
+    } catch (_) {}
 
     final d = await DocStore._dir();
-    var restored = 0;
     for (final f in archive) {
       if (!f.isFile) continue;
       final parts = f.name.split('/');
