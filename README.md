@@ -31,7 +31,10 @@ Versão atual: **2.0.0**
 Recupera páginas em mau estado (papel amarelado, manchas, sombras, texto desbotado). Primeiro normaliza o fundo, depois faz uma binarização adaptativa de Sauvola com bordas suaves, para as letras finas não quebrarem, e no fim remove pontinhos isolados. O código está em `image_ops.dart` (`_restore`); o valor `k` controla a força: mais alto limpa mais, mais baixo preserva texto fraco.
 
 ### Criar e importar
-- **Criar PDF**: título, texto e fotos, com tamanho e orientação da página à escolha.
+- **Criar PDF**: título (alinhado à esquerda, centro ou direita), texto e fotos, com tamanho e orientação da página à escolha.
+  - **Editor de texto como no Word**: negrito, itálico, sublinhado, fonte (Arial ou Times), tamanho, cor, alinhamento por parágrafo (esquerda, centro, direita, justificado), listas com marcadores ou números, recuo, desfazer e refazer. Tudo o que aparece no editor sai igual no PDF.
+  - **Tela cheia**: o botão ⤢ abre o texto numa tela só para ele, com a barra de formatação completa.
+  - O botão **Criar PDF** fica fixo no rodapé, sempre visível acima da barra de navegação.
 - **Importar PDF** do celular.
 - **Fotos para PDF**: junta várias fotos num único PDF.
 
@@ -81,7 +84,7 @@ Os arquivos `.dart` ficam todos na raiz do repositório. O workflow (`.github/wo
 
 - move `main.dart` para `lib/`, `doc_store.dart`, `image_ops.dart` e `pdf_tools.dart` para `lib/services/`, e o resto para `lib/screens/`;
 - usa `logo_docscan.png` como logo e ícone do app;
-- copia a fonte DejaVu Sans, que tem acentos, para os PDFs criados no app;
+- copia a fonte DejaVu Sans (normal e negrito), que tem acentos, para os PDFs criados no app; as versões itálicas já estão em `assets/fonts/`;
 - gera as pastas `android/` e `ios/` com `flutter create`;
 - força `compileSdk 36` nos plugins;
 - registra o DocScan para abrir PDFs vindos de outros apps (`AndroidManifest.xml` + `MainActivity.kt`);
@@ -119,9 +122,10 @@ Os arquivos `.dart` ficam todos na raiz do repositório. O workflow (`.github/wo
 | `image_ops.dart` | Operações de imagem (em isolates) |
 | `pdf_tools.dart` | Operações em PDF (em isolates) |
 | `assets/video/` | Vídeo tutorial e capa |
+| `assets/fonts/` | Fontes itálicas do Criar PDF (as normais vêm do workflow) |
 
 ### Principais bibliotecas
-`cunning_document_scanner` (scanner), `google_mlkit_text_recognition` (OCR), `google_mlkit_barcode_scanning` (QR), `pdf` e `printing` (gerar e imprimir), `pdfrx` (leitor), `syncfusion_flutter_pdf` (senha, mesclar, dividir), `image` (filtros), `archive` (backup .zip).
+`cunning_document_scanner` (scanner), `google_mlkit_text_recognition` (OCR), `google_mlkit_barcode_scanning` (QR), `pdf` e `printing` (gerar e imprimir), `pdfrx` (leitor), `syncfusion_flutter_pdf` (senha, mesclar, dividir), `image` (filtros), `archive` (backup .zip), `flutter_quill` (editor de texto do Criar PDF).
 
 ---
 

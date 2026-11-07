@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'screens/common.dart';
 import 'screens/splash_screen.dart';
 
@@ -39,6 +41,15 @@ class DocScanApp extends StatelessWidget {
           theme: appTheme(Brightness.light),
           darkTheme: appTheme(Brightness.dark),
           themeMode: mode,
+          // Português (menus, calendário, copiar/colar) e textos do editor.
+          locale: const Locale('pt', 'PT'),
+          supportedLocales: const [Locale('pt', 'PT'), Locale('pt', 'BR'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            FlutterQuillLocalizations.delegate,
+          ],
           // Ícones da barra de status escuros no tema claro e claros no escuro.
           builder: (ctx, child) => AnnotatedRegion<SystemUiOverlayStyle>(
             value: Theme.of(ctx).brightness == Brightness.dark
