@@ -31,10 +31,13 @@ Versão atual: **2.0.0**
 Recupera páginas em mau estado (papel amarelado, manchas, sombras, texto desbotado). Primeiro normaliza o fundo, depois faz uma binarização adaptativa de Sauvola com bordas suaves, para as letras finas não quebrarem, e no fim remove pontinhos isolados. O código está em `image_ops.dart` (`_restore`); o valor `k` controla a força: mais alto limpa mais, mais baixo preserva texto fraco.
 
 ### Criar e importar
-- **Criar PDF**: título (alinhado à esquerda, centro ou direita), texto e fotos, com tamanho e orientação da página à escolha.
-  - **Editor de texto como no Word**: negrito, itálico, sublinhado, fonte (Arial ou Times), tamanho, cor, alinhamento por parágrafo (esquerda, centro, direita, justificado), listas com marcadores ou números, recuo, desfazer e refazer. Tudo o que aparece no editor sai igual no PDF.
-  - **Tela cheia**: o botão ⤢ abre o texto numa tela só para ele, com a barra de formatação completa.
-  - O botão **Criar PDF** fica fixo no rodapé, sempre visível acima da barra de navegação.
+- **Criar PDF**: editor de documentos parecido com o Word, numa folha branca.
+  - **Barra em abas** acima do teclado: *Texto* (fonte Arial/Times, tamanho, negrito, itálico, sublinhado, riscado, cor, marca-texto, limpar formatação), *Parágrafo* (título 1/2/3, alinhamento esquerda/centro/direita/justificado, listas, recuo, espaçamento entre linhas, **Juntar linhas**) e *Inserir* (modelo, assinatura, data, foto, linha, nova página, localizar). Desfazer e refazer sempre visíveis.
+  - **Modelos**: cartas de pedido de demissão (com aviso prévio, com férias por gozar, pedindo dispensa do aviso prévio, durante o período experimental), carta formal, declaração e recibo, com o layout de uma carta real (destinatário à direita, assunto em negrito, texto justificado, assinatura).
+  - **Juntar linhas**: conserta texto colado (por exemplo do OCR) que vem com quebras no meio das frases.
+  - **Assinatura e fotos no meio do texto**: ficam como `[assinatura]` e `[foto N]` no editor e viram imagem no PDF; `[nova página]` e uma linha `————` também são convertidos.
+  - **Página** (ícone de ajustes): nome do arquivo, papel, orientação, margens, tamanho da letra, numeração de páginas, tamanho da assinatura e fotos em páginas próprias.
+  - **Pré-visualizar** antes de salvar e **rascunho automático**: se sair sem criar o PDF, o texto volta na próxima vez.
 - **Importar PDF** do celular.
 - **Fotos para PDF**: junta várias fotos num único PDF.
 
@@ -106,7 +109,8 @@ Os arquivos `.dart` ficam todos na raiz do repositório. O workflow (`.github/wo
 | `tab_me.dart` | Aba Eu: tema, backup, privacidade, versão |
 | `tool_actions.dart` | Ações de cada ferramenta |
 | `editor_screen.dart` | Recorte, perspectiva, filtros e giro |
-| `create_pdf_screen.dart` | Criar PDF |
+| `create_pdf_screen.dart` | Criar PDF (editor, conversão para PDF, pré-visualização) |
+| `letter_templates.dart` | Modelos de cartas do Criar PDF |
 | `page_manager.dart` | Organizar páginas |
 | `signature_screen.dart` | Desenhar assinatura |
 | `place_screen.dart` | Posicionar carimbo, assinatura e marca d'água (arrastar, tamanho, transparência) |
